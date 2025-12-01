@@ -2,6 +2,7 @@
 using System.Collections.Immutable;
 using System.Net.WebSockets;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using NLog;
 using Polly.Contrib.WaitAndRetry;
 using Refit;
@@ -14,6 +15,7 @@ using StabilityMatrix.Core.Models.Api.Comfy;
 using StabilityMatrix.Core.Models.Api.Comfy.Nodes;
 using StabilityMatrix.Core.Models.Api.Comfy.NodeTypes;
 using StabilityMatrix.Core.Models.Api.Comfy.WebSocketData;
+using StabilityMatrix.Core.Models.Configs;
 using StabilityMatrix.Core.Models.FileInterfaces;
 using Websocket.Client;
 using Websocket.Client.Exceptions;
@@ -95,8 +97,10 @@ public class ComfyClient : InferenceClientBase
     /// </summary>
     public event EventHandler<ComfyWebSocketImageData>? PreviewImageReceived;
 
-    public ComfyClient(IApiFactory apiFactory, Uri baseAddress)
+    public ComfyClient(IApiFactory apiFactory, Uri baseAddress, IOptions<ComfyServerSettings>? settings = null)
     {
+        var serverSettings = settings?.Value ?? new ComfyServerSettings();
+        
         comfyApi = apiFactory.CreateRefitClient<IComfyApi>(
             baseAddress,
             new RefitSettings
@@ -117,7 +121,20 @@ public class ComfyClient : InferenceClientBase
         webSocketClient = new WebsocketClient(wsUri)
         {
             Name = nameof(ComfyClient),
-            ReconnectTimeout = TimeSpan.FromSeconds(30)
+            ReconnectTimeout = TimeSpan.FromSeconds(30),
+            // Configure WebSocket factory to inject custom headers
+            MessageFactory = () =>
+            {
+                var client = new ClientWebSocket();
+                if (serverSettings.Headers != null)
+                {
+                    foreach (var header in serverSettings.Headers)
+                    {
+                        client.Options.SetRequestHeader(header.Key, header.Value);
+                    }
+                }
+                return client;
+            }
         };
 
         webSocketClient.DisconnectionHappened.Subscribe(

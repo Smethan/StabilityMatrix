@@ -387,6 +387,7 @@ public sealed class App : Application
 
         services.Configure<DebugOptions>(Config.GetSection("Debug"));
         services.Configure<ApiOptions>(Config.GetSection("Api"));
+        services.Configure<ComfyServerSettings>(Config.GetSection("ComfyServer"));
 
         var apiOptions = Config.GetSection("Api").Get<ApiOptions>() ?? new ApiOptions();
 

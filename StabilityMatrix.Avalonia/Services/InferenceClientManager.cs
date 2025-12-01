@@ -13,6 +13,7 @@ using DynamicData;
 using DynamicData.Binding;
 using Injectio.Attributes;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SkiaSharp;
 using StabilityMatrix.Avalonia.Helpers;
 using StabilityMatrix.Avalonia.Models;
@@ -23,6 +24,7 @@ using StabilityMatrix.Core.Helper;
 using StabilityMatrix.Core.Inference;
 using StabilityMatrix.Core.Models;
 using StabilityMatrix.Core.Models.Api.Comfy;
+using StabilityMatrix.Core.Models.Configs;
 using StabilityMatrix.Core.Models.FileInterfaces;
 using StabilityMatrix.Core.Models.Packages;
 using StabilityMatrix.Core.Services;
@@ -41,6 +43,7 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
     private readonly IModelIndexService modelIndexService;
     private readonly ISettingsManager settingsManager;
     private readonly ICompletionProvider completionProvider;
+    private readonly IOptions<ComfyServerSettings> comfyServerSettings;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsConnected), nameof(CanUserConnect))]
@@ -160,7 +163,8 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         IApiFactory apiFactory,
         IModelIndexService modelIndexService,
         ISettingsManager settingsManager,
-        ICompletionProvider completionProvider
+        ICompletionProvider completionProvider,
+        IOptions<ComfyServerSettings> comfyServerSettings
     )
     {
         this.logger = logger;
@@ -168,6 +172,7 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         this.modelIndexService = modelIndexService;
         this.settingsManager = settingsManager;
         this.completionProvider = completionProvider;
+        this.comfyServerSettings = comfyServerSettings;
 
         modelsSource
             .Connect()
@@ -762,7 +767,7 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         {
             logger.LogDebug("Connecting to {@Uri}...", uri);
 
-            var tempClient = new ComfyClient(apiFactory, uri);
+            var tempClient = new ComfyClient(apiFactory, uri, comfyServerSettings);
 
             await tempClient.ConnectAsync(cancellationToken);
             logger.LogDebug("Connected to {@Uri}", uri);
