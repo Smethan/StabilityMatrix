@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reactive.Disposables;
@@ -575,11 +575,11 @@ public class SettingsManager(ILogger<SettingsManager> logger) : ISettingsManager
                 return;
             }
 
-            using var fs = File.Open(SettingsFile, FileMode.Open);
+            await using var fs = File.Open(SettingsFile, FileMode.Create);
             if (fs.CanWrite)
             {
-                fs.Write(jsonBytes, 0, jsonBytes.Length);
-                fs.Flush();
+                await fs.WriteAsync(jsonBytes, cancellationToken).ConfigureAwait(false);
+                await fs.FlushAsync(cancellationToken).ConfigureAwait(false);
                 fs.SetLength(jsonBytes.Length);
             }
         }

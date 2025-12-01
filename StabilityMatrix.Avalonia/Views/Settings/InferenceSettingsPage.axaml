@@ -1,4 +1,4 @@
-﻿<controls:UserControlBase
+<controls:UserControlBase
     x:Class="StabilityMatrix.Avalonia.Views.Settings.InferenceSettingsPage"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -167,6 +167,50 @@
                     <DataGrid AutoGenerateColumns="True" ItemsSource="{Binding OutputImageFileNameFormatVars}" />
                 </ui:TeachingTip>
 
+            </sg:SpacedGrid>
+
+            <!--  ComfyUI Server Settings  -->
+             <sg:SpacedGrid RowDefinitions="Auto,*,*,*" RowSpacing="4">
+                <TextBlock
+                    Margin="0,0,0,4"
+                    FontWeight="Medium"
+                    Text="ComfyUI Server" />
+
+                <ui:SettingsExpander
+                    Grid.Row="1"
+                    Header="ComfyUI Server URL"
+                    IconSource="Link">
+                    <ui:SettingsExpander.Footer>
+                        <TextBox
+                            MinWidth="200"
+                            Text="{Binding ComfyUIHost}"
+                            Watermark="e.g., localhost" />
+                    </ui:SettingsExpander.Footer>
+                </ui:SettingsExpander>
+
+                <ui:SettingsExpander
+                    Grid.Row="2"
+                    Header="ComfyUI Server Port"
+                    IconSource="NumberSymbol">
+                    <ui:SettingsExpander.Footer>
+                        <TextBox
+                            MinWidth="200"
+                            Text="{Binding ComfyUIPort}"
+                            Watermark="e.g., 8188" />
+                    </ui:SettingsExpander.Footer>
+                </ui:SettingsExpander>
+
+                <ui:SettingsExpander
+                    Grid.Row="3"
+                    Header="ComfyUI Authentication Headers"
+                    IconSource="LockClosed">
+                    <ui:SettingsExpander.Footer>
+                        <TextBox
+                            MinWidth="200"
+                            Text="{Binding ComfyUIAuthHeaders}"
+                            Watermark="e.g., {\"Authorization\": \"Bearer TOKEN\"}" />
+                    </ui:SettingsExpander.Footer>
+                </ui:SettingsExpander>
             </sg:SpacedGrid>
 
             <!--  Dimensions  -->

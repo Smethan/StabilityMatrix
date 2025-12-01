@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.Text.Json.Serialization;
 using Semver;
@@ -53,6 +53,9 @@ public class Settings
     public List<string>? PathExtensions { get; set; }
     public string? WebApiHost { get; set; }
     public string? WebApiPort { get; set; }
+    public string? ComfyUIHost { get; set; }
+    public string? ComfyUIPort { get; set; }
+    public string? ComfyUIAuthHeaders { get; set; }
 
     /// <summary>
     /// Preferred update channel

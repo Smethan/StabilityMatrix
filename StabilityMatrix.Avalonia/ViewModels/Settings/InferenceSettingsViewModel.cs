@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
 using System.Reactive.Linq;
 using Avalonia.Controls.Notifications;
@@ -69,6 +69,16 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
     [ObservableProperty]
     private bool filterExtraNetworksByBaseModel;
 
+    [ObservableProperty]
+    private string? comfyUIHost;
+
+    [ObservableProperty]
+    private string? comfyUIPort;
+
+    [ObservableProperty]
+    [CustomValidation(typeof(InferenceSettingsViewModel), nameof(ValidateComfyUIAuthHeaders))]
+    private string? comfyUIAuthHeaders;
+
     private List<string> ignoredFileNameFormatVars =
     [
         "author",
@@ -124,6 +134,24 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
             vm => vm.IsPromptCompletionEnabled,
             settings => settings.IsPromptCompletionEnabled,
             true
+        );
+
+        settingsManager.RelayPropertyFor(
+            this,
+            vm => vm.ComfyUIHost,
+            settings => settings.ComfyUIHost
+        );
+
+        settingsManager.RelayPropertyFor(
+            this,
+            vm => vm.ComfyUIPort,
+            settings => settings.ComfyUIPort
+        );
+
+        settingsManager.RelayPropertyFor(
+            this,
+            vm => vm.ComfyUIAuthHeaders,
+            settings => settings.ComfyUIAuthHeaders
         );
 
         settingsManager.RelayPropertyFor(
@@ -219,6 +247,39 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
     )
     {
         return FileNameFormatProvider.GetSample().Validate(format ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Validator for <see cref="ComfyUIAuthHeaders"/>
+    /// </summary>
+    public static ValidationResult ValidateComfyUIAuthHeaders(
+        string? headers,
+        ValidationContext context
+    )
+    {
+        // Allow empty or null values (auth headers are optional)
+        if (string.IsNullOrWhiteSpace(headers))
+        {
+            return ValidationResult.Success!;
+        }
+
+        // Validate JSON format
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(headers);
+            
+            // Ensure it's a JSON object (dictionary), not an array or primitive
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+            {
+                return new ValidationResult("Authentication headers must be a JSON object (e.g., {\"Authorization\": \"Bearer TOKEN\"})");
+            }
+            
+            return ValidationResult.Success!;
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            return new ValidationResult($"Invalid JSON format: {ex.Message}");
+        }
     }
 
     /// <inheritdoc />
