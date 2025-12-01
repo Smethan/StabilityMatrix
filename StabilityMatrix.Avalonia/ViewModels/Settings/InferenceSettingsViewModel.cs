@@ -139,19 +139,22 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
         settingsManager.RelayPropertyFor(
             this,
             vm => vm.ComfyUIHost,
-            settings => settings.ComfyUIHost
+            settings => settings.ComfyUIHost,
+            true
         );
 
         settingsManager.RelayPropertyFor(
             this,
             vm => vm.ComfyUIPort,
-            settings => settings.ComfyUIPort
+            settings => settings.ComfyUIPort,
+            true
         );
 
         settingsManager.RelayPropertyFor(
             this,
             vm => vm.ComfyUIAuthHeaders,
-            settings => settings.ComfyUIAuthHeaders
+            settings => settings.ComfyUIAuthHeaders,
+            true
         );
 
         settingsManager.RelayPropertyFor(
