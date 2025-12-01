@@ -170,7 +170,7 @@
             </sg:SpacedGrid>
 
             <!--  ComfyUI Server Settings  -->
-             <sg:SpacedGrid RowDefinitions="Auto,*,*,*" RowSpacing="4">
+            <sg:SpacedGrid RowDefinitions="Auto,*,*,*" RowSpacing="4">
                 <TextBlock
                     Margin="0,0,0,4"
                     FontWeight="Medium"
