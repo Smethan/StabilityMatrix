@@ -467,6 +467,32 @@ public partial class InferenceViewModel : PageViewModelBase, IAsyncDisposable
     }
 
     /// <summary>
+    /// Connect to the ComfyUI server specified in settings.
+    /// </summary>
+    [RelayCommand(IncludeCancelCommand = true)]
+    private async Task ConnectToServer(CancellationToken cancellationToken = default)
+    {
+        if (ClientManager.IsConnected)
+            return;
+
+        if (Design.IsDesignMode)
+        {
+            await ClientManager.ConnectAsync(cancellationToken);
+            return;
+        }
+
+        var result = await notificationService.TryAsync(
+            ClientManager.ConnectAsync(cancellationToken),
+            "Could not connect to ComfyUI server"
+        );
+
+        if (result.Exception is { } exception)
+        {
+            Logger.Error(exception, "Failed to connect to ComfyUI server");
+        }
+    }
+
+    /// <summary>
     /// Connect to the inference server.
     /// </summary>
     [RelayCommand(IncludeCancelCommand = true)]
