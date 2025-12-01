@@ -106,7 +106,8 @@ public class ComfyClient : InferenceClientBase
             new RefitSettings
             {
                 ContentSerializer = new SystemTextJsonContentSerializer(jsonSerializerOptions),
-            }
+            },
+            serverSettings.Headers
         );
         BaseAddress = baseAddress;
 

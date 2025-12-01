@@ -575,11 +575,11 @@ public class SettingsManager(ILogger<SettingsManager> logger) : ISettingsManager
                 return;
             }
 
-            await using var fs = File.Open(SettingsFile, FileMode.Create);
+            using var fs = File.Open(SettingsFile, FileMode.Create);
             if (fs.CanWrite)
             {
-                await fs.WriteAsync(jsonBytes, cancellationToken).ConfigureAwait(false);
-                await fs.FlushAsync(cancellationToken).ConfigureAwait(false);
+                fs.Write(jsonBytes);
+                fs.Flush();
                 fs.SetLength(jsonBytes.Length);
             }
         }

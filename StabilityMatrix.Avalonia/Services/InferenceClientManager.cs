@@ -43,7 +43,6 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
     private readonly IModelIndexService modelIndexService;
     private readonly ISettingsManager settingsManager;
     private readonly ICompletionProvider completionProvider;
-    private readonly IOptions<ComfyServerSettings> comfyServerSettings;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsConnected), nameof(CanUserConnect))]
@@ -163,8 +162,7 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         IApiFactory apiFactory,
         IModelIndexService modelIndexService,
         ISettingsManager settingsManager,
-        ICompletionProvider completionProvider,
-        IOptions<ComfyServerSettings> comfyServerSettings
+        ICompletionProvider completionProvider
     )
     {
         this.logger = logger;
@@ -172,7 +170,6 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         this.modelIndexService = modelIndexService;
         this.settingsManager = settingsManager;
         this.completionProvider = completionProvider;
-        this.comfyServerSettings = comfyServerSettings;
 
         modelsSource
             .Connect()
@@ -767,7 +764,10 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         {
             logger.LogDebug("Connecting to {@Uri}...", uri);
 
-            var tempClient = new ComfyClient(apiFactory, uri, comfyServerSettings);
+            // Create ComfyServerSettings from user settings
+            var serverSettings = CreateComfyServerSettingsFromUserSettings();
+
+            var tempClient = new ComfyClient(apiFactory, uri, Options.Create(serverSettings));
 
             await tempClient.ConnectAsync(cancellationToken);
             logger.LogDebug("Connected to {@Uri}", uri);
@@ -785,6 +785,35 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         {
             IsConnecting = false;
         }
+    }
+
+    /// <summary>
+    /// Creates ComfyServerSettings from user settings, parsing auth headers from JSON if provided
+    /// </summary>
+    private ComfyServerSettings CreateComfyServerSettingsFromUserSettings()
+    {
+        var settings = new ComfyServerSettings();
+
+        // Parse auth headers from JSON string if provided
+        var authHeadersJson = settingsManager.Settings.ComfyUIAuthHeaders;
+        if (!string.IsNullOrWhiteSpace(authHeadersJson))
+        {
+            try
+            {
+                var headers = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(authHeadersJson);
+                if (headers != null)
+                {
+                    settings.Headers = headers;
+                    logger.LogDebug("Loaded {Count} auth headers from user settings", headers.Count);
+                }
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                logger.LogWarning(ex, "Failed to parse ComfyUI auth headers from user settings");
+            }
+        }
+
+        return settings;
     }
 
     private async Task MigrateLinksIfNeeded(PackagePair packagePair)
@@ -826,7 +855,23 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
     /// <inheritdoc />
     public virtual Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        return ConnectAsyncImpl(new Uri("http://127.0.0.1:8188"), cancellationToken);
+        // Use user-configured host/port if set, otherwise default to localhost:8188
+        var host = settingsManager.Settings.ComfyUIHost;
+        var port = settingsManager.Settings.ComfyUIPort;
+
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            host = "127.0.0.1";
+        }
+        host = host.Replace("localhost", "127.0.0.1");
+
+        if (string.IsNullOrWhiteSpace(port) || !int.TryParse(port, out var portNumber))
+        {
+            portNumber = 8188;
+        }
+
+        var uri = new UriBuilder("http", host, portNumber).Uri;
+        return ConnectAsyncImpl(uri, cancellationToken);
     }
 
     /// <inheritdoc />
