@@ -14,6 +14,7 @@ using DynamicData.Binding;
 using Injectio.Attributes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Refit;
 using SkiaSharp;
 using StabilityMatrix.Avalonia.Helpers;
 using StabilityMatrix.Avalonia.Models;
@@ -764,6 +765,18 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         {
             logger.LogDebug("Connecting to {@Uri}...", uri);
 
+            // Warn if HTTP is used with a domain that looks like it should be HTTPS
+            if (uri.Scheme == "http" && !uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) 
+                && !uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogWarning(
+                    "Using HTTP with remote domain '{Host}'. Cloudflare tunnels and most remote servers require HTTPS. " +
+                    "Consider using 'https://{Host}' instead.",
+                    uri.Host,
+                    uri.Host
+                );
+            }
+
             // Create ComfyServerSettings from user settings
             var serverSettings = CreateComfyServerSettingsFromUserSettings();
 
@@ -776,9 +789,55 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
 
             await LoadSharedPropertiesAsync();
         }
-        catch (Exception)
+        catch (Refit.ApiException apiEx)
         {
             Client = null;
+            
+            // Check if the response is HTML instead of JSON (common with Cloudflare errors)
+            if (apiEx.Content is { } content && content.TrimStart().StartsWith("<", StringComparison.Ordinal))
+            {
+                logger.LogError(
+                    apiEx,
+                    "Received HTML response instead of JSON from {Uri}. " +
+                    "This usually means the server is returning an error page. " +
+                    "For Cloudflare tunnels, ensure you're using HTTPS and have proper authentication headers configured.",
+                    uri
+                );
+                throw new InvalidOperationException(
+                    $"Server returned HTML instead of JSON. This usually indicates:\n" +
+                    $"1. The URL should use HTTPS instead of HTTP (e.g., https://{uri.Host})\n" +
+                    $"2. Authentication headers may be missing or incorrect\n" +
+                    $"3. The server may be blocking the request\n\n" +
+                    $"Original error: {apiEx.Message}",
+                    apiEx
+                );
+            }
+            
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Client = null;
+            
+            // Check for WebSocket connection errors
+            if (ex.Message.Contains("status code '200'") && ex.Message.Contains("status code '101'"))
+            {
+                logger.LogError(
+                    ex,
+                    "WebSocket connection failed: Server returned HTTP 200 instead of 101 (WebSocket upgrade). " +
+                    "For Cloudflare tunnels, ensure you're using HTTPS (wss://) and have proper authentication headers."
+                );
+                throw new InvalidOperationException(
+                    $"WebSocket connection failed. The server returned HTTP 200 instead of upgrading to WebSocket (101).\n\n" +
+                    $"This usually means:\n" +
+                    $"1. Use HTTPS instead of HTTP (e.g., https://{uri.Host} instead of http://{uri.Host})\n" +
+                    $"2. Cloudflare tunnels require HTTPS/WSS connections\n" +
+                    $"3. Authentication headers may be required\n\n" +
+                    $"Original error: {ex.Message}",
+                    ex
+                );
+            }
+            
             throw;
         }
         finally

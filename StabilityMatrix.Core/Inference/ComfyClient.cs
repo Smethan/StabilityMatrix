@@ -112,9 +112,11 @@ public class ComfyClient : InferenceClientBase
         BaseAddress = baseAddress;
 
         // Setup websocket client
+        // Use wss:// for HTTPS URLs, ws:// for HTTP URLs
+        var wsScheme = baseAddress.Scheme == "https" ? "wss" : "ws";
         var wsUri = new UriBuilder(baseAddress)
         {
-            Scheme = "ws",
+            Scheme = wsScheme,
             Path = "/ws",
             Query = $"clientId={ClientId}"
         }.Uri;
