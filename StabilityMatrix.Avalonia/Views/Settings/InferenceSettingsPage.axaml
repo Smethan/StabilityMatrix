@@ -170,7 +170,7 @@
             </sg:SpacedGrid>
 
             <!--  ComfyUI Server Settings  -->
-             <sg:SpacedGrid RowDefinitions="Auto,*,*,*" RowSpacing="4">
+            <sg:SpacedGrid RowDefinitions="Auto,*,*,*" RowSpacing="4">
                 <TextBlock
                     Margin="0,0,0,4"
                     FontWeight="Medium"
@@ -191,7 +191,7 @@
                 <ui:SettingsExpander
                     Grid.Row="2"
                     Header="ComfyUI Server Port"
-                    IconSource="NumberSymbol">
+                    IconSource="Edit">
                     <ui:SettingsExpander.Footer>
                         <TextBox
                             MinWidth="200"
@@ -208,7 +208,7 @@
                         <TextBox
                             MinWidth="200"
                             Text="{Binding ComfyUIAuthHeaders}"
-                            Watermark="e.g., {\"Authorization\": \"Bearer TOKEN\"}" />
+                            Watermark="e.g., {&quot;Authorization&quot;: &quot;Bearer TOKEN&quot;}" />
                     </ui:SettingsExpander.Footer>
                 </ui:SettingsExpander>
             </sg:SpacedGrid>

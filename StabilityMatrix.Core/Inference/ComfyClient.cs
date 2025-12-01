@@ -106,7 +106,8 @@ public class ComfyClient : InferenceClientBase
             new RefitSettings
             {
                 ContentSerializer = new SystemTextJsonContentSerializer(jsonSerializerOptions),
-            }
+            },
+            serverSettings.Headers
         );
         BaseAddress = baseAddress;
 
@@ -118,23 +119,24 @@ public class ComfyClient : InferenceClientBase
             Query = $"clientId={ClientId}"
         }.Uri;
 
-        webSocketClient = new WebsocketClient(wsUri)
+        // Configure WebSocket factory to inject custom headers
+        Func<ClientWebSocket> clientFactory = () =>
+        {
+            var client = new ClientWebSocket();
+            if (serverSettings.Headers != null)
+            {
+                foreach (var header in serverSettings.Headers)
+                {
+                    client.Options.SetRequestHeader(header.Key, header.Value);
+                }
+            }
+            return client;
+        };
+
+        webSocketClient = new WebsocketClient(wsUri, clientFactory)
         {
             Name = nameof(ComfyClient),
-            ReconnectTimeout = TimeSpan.FromSeconds(30),
-            // Configure WebSocket factory to inject custom headers
-            ClientFactory = () =>
-            {
-                var client = new ClientWebSocket();
-                if (serverSettings.Headers != null)
-                {
-                    foreach (var header in serverSettings.Headers)
-                    {
-                        client.Options.SetRequestHeader(header.Key, header.Value);
-                    }
-                }
-                return client;
-            }
+            ReconnectTimeout = TimeSpan.FromSeconds(30)
         };
 
         webSocketClient.DisconnectionHappened.Subscribe(
