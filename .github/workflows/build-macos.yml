@@ -1,0 +1,77 @@
+name: Build macOS
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        required: false
+        description: Version (Semver without leading v)
+        default: "0.0.0-dev"
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-macos:
+    name: Build macOS (arm64)
+    env:
+      platform-id: osx-arm64
+      app-name: "Stability Matrix.app"
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set Version from manual input
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Using version ${{ github.event.inputs.version }}"
+          echo "RELEASE_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+
+      - name: Set Version from commit
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          echo "Using dev version"
+          echo "RELEASE_VERSION=0.0.0-dev.${{ github.run_number }}" >> $GITHUB_ENV
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install dependencies
+        run: dotnet restore -p:PublishReadyToRun=true
+        
+      - name: Check Version
+        run: echo $RELEASE_VERSION
+
+      - name: .NET Msbuild (App)
+        run: >
+          dotnet msbuild ./StabilityMatrix.Avalonia/StabilityMatrix.Avalonia.csproj
+          -t:BundleApp -p:UseAppHost=true -p:SelfContained=true
+          -p:Configuration=Release -p:RuntimeIdentifier=${{ env.platform-id }}
+          -p:Version=$RELEASE_VERSION
+          -p:PublishDir=out
+          -p:PublishReadyToRun=true
+          -p:CFBundleShortVersionString=$RELEASE_VERSION
+          -p:CFBundleName="Stability Matrix"
+          -p:CFBundleDisplayName="Stability Matrix"
+          -p:CFBundleVersion=$RELEASE_VERSION
+
+      - name: Post Build (App)
+        run: mkdir -p output && mv "./StabilityMatrix.Avalonia/out/Stability Matrix.app" "./output/${{ env.app-name }}"
+
+      - name: Zip Artifact (App)
+        working-directory: output
+        run: zip -r -y "../StabilityMatrix-${{ env.platform-id }}-app.zip" "${{ env.app-name }}"
+
+      - name: Upload Artifact (App)
+        uses: actions/upload-artifact@v4
+        with:
+          name: StabilityMatrix-${{ env.platform-id }}-${{ env.RELEASE_VERSION }}
+          path: StabilityMatrix-${{ env.platform-id }}-app.zip
+          if-no-files-found: error
