@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.repository == 'LykosAI/StabilityMatrix'
+    if: github.repository == 'Smethan/StabilityMatrix'
     runs-on: ubuntu-latest
 
     steps:
