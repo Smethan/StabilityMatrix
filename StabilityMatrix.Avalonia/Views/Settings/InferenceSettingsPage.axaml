@@ -191,7 +191,7 @@
                 <ui:SettingsExpander
                     Grid.Row="2"
                     Header="ComfyUI Server Port"
-                    IconSource="NumberSymbol">
+                    IconSource="Edit">
                     <ui:SettingsExpander.Footer>
                         <TextBox
                             MinWidth="200"
