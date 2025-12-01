@@ -859,18 +859,61 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         var host = settingsManager.Settings.ComfyUIHost;
         var port = settingsManager.Settings.ComfyUIPort;
 
-        if (string.IsNullOrWhiteSpace(host))
-        {
-            host = "127.0.0.1";
-        }
-        host = host.Replace("localhost", "127.0.0.1");
+        Uri uri;
 
-        if (string.IsNullOrWhiteSpace(port) || !int.TryParse(port, out var portNumber))
+        // Check if host is a full URL (starts with http:// or https://)
+        if (!string.IsNullOrWhiteSpace(host) && 
+            (host.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || 
+             host.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
         {
-            portNumber = 8188;
+            // Use the URL directly
+            if (Uri.TryCreate(host, UriKind.Absolute, out var parsedUri))
+            {
+                uri = parsedUri;
+            }
+            else
+            {
+                logger.LogWarning("Invalid ComfyUI URL format: {Host}", host);
+                // Fall back to default
+                uri = new UriBuilder("http", "127.0.0.1", 8188).Uri;
+            }
+        }
+        else
+        {
+            // Legacy host/port mode or host:port format
+            string hostName;
+            int portNumber;
+
+            if (string.IsNullOrWhiteSpace(host))
+            {
+                hostName = "127.0.0.1";
+                portNumber = 8188;
+            }
+            else
+            {
+                // Check if host contains a port (format: host:port)
+                var hostParts = host.Split(':', 2);
+                if (hostParts.Length == 2 && int.TryParse(hostParts[1], out portNumber))
+                {
+                    // Host contains port in format host:port
+                    hostName = hostParts[0];
+                }
+                else
+                {
+                    // Use separate port field if provided
+                    hostName = host;
+                    if (string.IsNullOrWhiteSpace(port) || !int.TryParse(port, out portNumber))
+                    {
+                        portNumber = 8188;
+                    }
+                }
+
+                hostName = hostName.Replace("localhost", "127.0.0.1");
+            }
+
+            uri = new UriBuilder("http", hostName, portNumber).Uri;
         }
 
-        var uri = new UriBuilder("http", host, portNumber).Uri;
         return ConnectAsyncImpl(uri, cancellationToken);
     }
 

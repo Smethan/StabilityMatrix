@@ -170,7 +170,7 @@
             </sg:SpacedGrid>
 
             <!--  ComfyUI Server Settings  -->
-            <sg:SpacedGrid RowDefinitions="Auto,*,*,*" RowSpacing="4">
+            <sg:SpacedGrid RowDefinitions="Auto,*,*" RowSpacing="4">
                 <TextBlock
                     Margin="0,0,0,4"
                     FontWeight="Medium"
@@ -184,24 +184,12 @@
                         <TextBox
                             MinWidth="200"
                             Text="{Binding ComfyUIHost}"
-                            Watermark="e.g., localhost" />
+                            Watermark="e.g., https://example.com or localhost:8188" />
                     </ui:SettingsExpander.Footer>
                 </ui:SettingsExpander>
 
                 <ui:SettingsExpander
                     Grid.Row="2"
-                    Header="ComfyUI Server Port"
-                    IconSource="Edit">
-                    <ui:SettingsExpander.Footer>
-                        <TextBox
-                            MinWidth="200"
-                            Text="{Binding ComfyUIPort}"
-                            Watermark="e.g., 8188" />
-                    </ui:SettingsExpander.Footer>
-                </ui:SettingsExpander>
-
-                <ui:SettingsExpander
-                    Grid.Row="3"
                     Header="ComfyUI Authentication Headers"
                     IconSource="LockClosed">
                     <ui:SettingsExpander.Footer>
