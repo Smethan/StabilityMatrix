@@ -123,7 +123,7 @@ public class ComfyClient : InferenceClientBase
             Name = nameof(ComfyClient),
             ReconnectTimeout = TimeSpan.FromSeconds(30),
             // Configure WebSocket factory to inject custom headers
-            MessageFactory = () =>
+            ClientFactory = () =>
             {
                 var client = new ClientWebSocket();
                 if (serverSettings.Headers != null)
