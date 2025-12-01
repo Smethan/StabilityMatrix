@@ -63,15 +63,57 @@ jobs:
           -p:CFBundleVersion=$RELEASE_VERSION
 
       - name: Post Build (App)
-        run: mkdir -p output && mv "./StabilityMatrix.Avalonia/out/Stability Matrix.app" "./output/${{ env.app-name }}"
+        run: mkdir -p signing && mv "./StabilityMatrix.Avalonia/out/Stability Matrix.app" "./signing/${{ env.app-name }}"
+
+      - name: Codesign app bundle
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.PROD_MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.PROD_MACOS_CERTIFICATE_PWD }}
+          MACOS_CERTIFICATE_NAME: ${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}
+          MACOS_CI_KEYCHAIN_PWD: ${{ secrets.PROD_MACOS_CI_KEYCHAIN_PWD }}
+        run: ./Build/codesign_macos.sh "./signing/${{ env.app-name }}"
+
+      - name: Notarize app bundle
+        env:
+          MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_APPLE_ID }}
+          MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_TEAM_ID }}
+          MACOS_NOTARIZATION_PWD: ${{ secrets.PROD_MACOS_NOTARIZATION_PWD }}
+        run: ./Build/notarize_macos.sh "./signing/${{ env.app-name }}"
 
       - name: Zip Artifact (App)
-        working-directory: output
+        working-directory: signing
         run: zip -r -y "../StabilityMatrix-${{ env.platform-id }}-app.zip" "${{ env.app-name }}"
 
       - name: Upload Artifact (App)
         uses: actions/upload-artifact@v4
         with:
-          name: StabilityMatrix-${{ env.platform-id }}-${{ env.RELEASE_VERSION }}
+          name: StabilityMatrix-${{ env.platform-id }}-app-${{ env.RELEASE_VERSION }}
           path: StabilityMatrix-${{ env.platform-id }}-app.zip
+          if-no-files-found: error
+          
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.11.x'
+      
+      - name: Install dependencies for dmg creation
+        run: brew install graphicsmagick imagemagick && npm install --global create-dmg
+      
+      - name: Create dmg
+        working-directory: signing
+        run: >
+          create-dmg "${{ env.app-name }}" --overwrite --identity "${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}"
+          
+      - name: Rename dmg
+        working-directory: signing
+        run: mv "$(find . -type f -name "*.dmg")" "StabilityMatrix-macos-arm64.dmg"
+          
+      - name: Zip Artifact (dmg)
+        working-directory: signing
+        run: zip -r -y "../StabilityMatrix-${{ env.platform-id }}-dmg.zip" "StabilityMatrix-macos-arm64.dmg"
+        
+      - name: Upload Artifact (dmg)
+        uses: actions/upload-artifact@v4
+        with:
+          name: StabilityMatrix-${{ env.platform-id }}-dmg-${{ env.RELEASE_VERSION }}
+          path: StabilityMatrix-${{ env.platform-id }}-dmg.zip
           if-no-files-found: error
