@@ -1055,7 +1055,7 @@ public sealed class App : Application
                 // Skip if app settings already set a level for this type
                 if (
                     Config[$"Logging:LogLevel:{type.FullName}"] is { } levelStr
-                    && Enum.TryParse<LogLevel>(levelStr, true, out _)
+                    && Enum.TryParse<Microsoft.Extensions.Logging.LogLevel>(levelStr, true, out _)
                 )
                 {
                     continue;

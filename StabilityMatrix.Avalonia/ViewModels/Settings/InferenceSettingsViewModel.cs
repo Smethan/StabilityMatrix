@@ -14,7 +14,6 @@ using DynamicData.Binding;
 using FluentAvalonia.UI.Controls;
 using FluentIcons.Common;
 using Injectio.Attributes;
-using Microsoft.Extensions.Logging;
 using NLog;
 using StabilityMatrix.Avalonia.Extensions;
 using StabilityMatrix.Avalonia.Models.Inference;
@@ -144,19 +143,9 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
             true
         );
 
-        settingsManager.RelayPropertyFor(
-            this,
-            vm => vm.ComfyUIHost,
-            settings => settings.ComfyUIHost,
-            true
-        );
+        settingsManager.RelayPropertyFor(this, vm => vm.ComfyUIHost, settings => settings.ComfyUIHost, true);
 
-        settingsManager.RelayPropertyFor(
-            this,
-            vm => vm.ComfyUIPort,
-            settings => settings.ComfyUIPort,
-            true
-        );
+        settingsManager.RelayPropertyFor(this, vm => vm.ComfyUIPort, settings => settings.ComfyUIPort, true);
 
         // Handle auth headers conversion between ObservableCollection and JSON string
         ComfyUIAuthHeaders.CollectionChanged += (_, _) =>
@@ -314,11 +303,9 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
         var headersDict = ComfyUIAuthHeaders
             .Where(h => !string.IsNullOrWhiteSpace(h.Key))
             .ToDictionary(h => h.Key, h => h.Value ?? string.Empty);
-        
-        var json = headersDict.Count > 0 
-            ? JsonSerializer.Serialize(headersDict)
-            : null;
-        
+
+        var json = headersDict.Count > 0 ? JsonSerializer.Serialize(headersDict) : null;
+
         settingsManager.Transaction(settings => settings.ComfyUIAuthHeaders = json);
     }
 
