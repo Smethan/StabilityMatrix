@@ -1,6 +1,10 @@
 using System.Collections.Immutable;
+using System.Collections.ObjectModel;
 using System.ComponentModel.DataAnnotations;
+using System.Linq;
 using System.Reactive.Linq;
+using System.Text.Json;
+using Avalonia.Collections;
 using Avalonia.Controls.Notifications;
 using Avalonia.Data;
 using Avalonia.Platform.Storage;
@@ -10,6 +14,7 @@ using DynamicData.Binding;
 using FluentAvalonia.UI.Controls;
 using FluentIcons.Common;
 using Injectio.Attributes;
+using Microsoft.Extensions.Logging;
 using NLog;
 using StabilityMatrix.Avalonia.Extensions;
 using StabilityMatrix.Avalonia.Models.Inference;
@@ -33,6 +38,7 @@ namespace StabilityMatrix.Avalonia.ViewModels.Settings;
 [RegisterSingleton<InferenceSettingsViewModel>]
 public partial class InferenceSettingsViewModel : PageViewModelBase
 {
+    private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
     private readonly INotificationService notificationService;
     private readonly ISettingsManager settingsManager;
     private readonly ICompletionProvider completionProvider;
@@ -76,8 +82,10 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
     private string? comfyUIPort;
 
     [ObservableProperty]
-    [CustomValidation(typeof(InferenceSettingsViewModel), nameof(ValidateComfyUIAuthHeaders))]
-    private string? comfyUIAuthHeaders;
+    [NotifyPropertyChangedFor(nameof(ComfyUIAuthHeadersView))]
+    private ObservableCollection<HeaderKeyPair> comfyUIAuthHeaders = new();
+
+    public DataGridCollectionView ComfyUIAuthHeadersView => new(ComfyUIAuthHeaders);
 
     private List<string> ignoredFileNameFormatVars =
     [
@@ -150,12 +158,26 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
             true
         );
 
-        settingsManager.RelayPropertyFor(
-            this,
-            vm => vm.ComfyUIAuthHeaders,
-            settings => settings.ComfyUIAuthHeaders,
-            true
-        );
+        // Handle auth headers conversion between ObservableCollection and JSON string
+        ComfyUIAuthHeaders.CollectionChanged += (_, _) =>
+        {
+            SaveHeadersToSettings();
+        };
+
+        // Subscribe to property changes on individual header items
+        ComfyUIAuthHeaders.CollectionChanged += (_, e) =>
+        {
+            if (e.NewItems != null)
+            {
+                foreach (HeaderKeyPair item in e.NewItems)
+                {
+                    item.PropertyChanged += (_, _) => SaveHeadersToSettings();
+                }
+            }
+        };
+
+        // Load headers from settings on initialization
+        LoadHeadersFromSettings();
 
         settingsManager.RelayPropertyFor(
             this,
@@ -253,35 +275,67 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
     }
 
     /// <summary>
-    /// Validator for <see cref="ComfyUIAuthHeaders"/>
+    /// Load headers from settings JSON string into the collection
     /// </summary>
-    public static ValidationResult ValidateComfyUIAuthHeaders(
-        string? headers,
-        ValidationContext context
-    )
+    private void LoadHeadersFromSettings()
     {
-        // Allow empty or null values (auth headers are optional)
-        if (string.IsNullOrWhiteSpace(headers))
+        var headersJson = settingsManager.Settings.ComfyUIAuthHeaders;
+        if (string.IsNullOrWhiteSpace(headersJson))
         {
-            return ValidationResult.Success!;
+            return;
         }
 
-        // Validate JSON format
         try
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(headers);
-            
-            // Ensure it's a JSON object (dictionary), not an array or primitive
-            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+            var headersDict = JsonSerializer.Deserialize<Dictionary<string, string>>(headersJson);
+            if (headersDict != null)
             {
-                return new ValidationResult("Authentication headers must be a JSON object (e.g., {\"Authorization\": \"Bearer TOKEN\"})");
+                ComfyUIAuthHeaders.Clear();
+                foreach (var kvp in headersDict)
+                {
+                    var pair = new HeaderKeyPair(kvp.Key, kvp.Value);
+                    pair.PropertyChanged += (_, _) => SaveHeadersToSettings();
+                    ComfyUIAuthHeaders.Add(pair);
+                }
             }
-            
-            return ValidationResult.Success!;
         }
-        catch (System.Text.Json.JsonException ex)
+        catch (JsonException ex)
         {
-            return new ValidationResult($"Invalid JSON format: {ex.Message}");
+            Logger.Warn(ex, "Failed to parse ComfyUI auth headers from settings");
+        }
+    }
+
+    /// <summary>
+    /// Save headers collection to settings as JSON string
+    /// </summary>
+    private void SaveHeadersToSettings()
+    {
+        // Convert collection to JSON string for storage
+        var headersDict = ComfyUIAuthHeaders
+            .Where(h => !string.IsNullOrWhiteSpace(h.Key))
+            .ToDictionary(h => h.Key, h => h.Value ?? string.Empty);
+        
+        var json = headersDict.Count > 0 
+            ? JsonSerializer.Serialize(headersDict)
+            : null;
+        
+        settingsManager.Transaction(settings => settings.ComfyUIAuthHeaders = json);
+    }
+
+    [RelayCommand]
+    private void AddAuthHeader()
+    {
+        var newHeader = new HeaderKeyPair();
+        newHeader.PropertyChanged += (_, _) => SaveHeadersToSettings();
+        ComfyUIAuthHeaders.Add(newHeader);
+    }
+
+    [RelayCommand]
+    private void RemoveAuthHeader(int index)
+    {
+        if (index >= 0 && index < ComfyUIAuthHeaders.Count)
+        {
+            ComfyUIAuthHeaders.RemoveAt(index);
         }
     }
 
@@ -295,6 +349,12 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
                 DimensionStringComparer.Instance
             )
         );
+
+        // Load headers if not already loaded
+        if (ComfyUIAuthHeaders.Count == 0)
+        {
+            LoadHeadersFromSettings();
+        }
 
         UpdateAvailableTagCompletionCsvs();
     }

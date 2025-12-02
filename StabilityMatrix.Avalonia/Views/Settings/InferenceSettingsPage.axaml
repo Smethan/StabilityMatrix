@@ -9,6 +9,8 @@
     xmlns:lang="clr-namespace:StabilityMatrix.Avalonia.Languages"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:mocks="clr-namespace:StabilityMatrix.Avalonia.DesignData"
+    xmlns:converters="clr-namespace:StabilityMatrix.Avalonia.Converters"
+    xmlns:models="clr-namespace:StabilityMatrix.Core.Models;assembly=StabilityMatrix.Core"
     xmlns:models1="clr-namespace:StabilityMatrix.Core.Models;assembly=StabilityMatrix.Core"
     xmlns:native="clr-namespace:StabilityMatrix.Native;assembly=StabilityMatrix.Native"
     xmlns:sg="clr-namespace:SpacedGridControl.Avalonia;assembly=SpacedGridControl.Avalonia"
@@ -170,7 +172,7 @@
             </sg:SpacedGrid>
 
             <!--  ComfyUI Server Settings  -->
-            <sg:SpacedGrid RowDefinitions="Auto,*,*" RowSpacing="4">
+            <sg:SpacedGrid RowDefinitions="Auto,*,Auto" RowSpacing="4">
                 <TextBlock
                     Margin="0,0,0,4"
                     FontWeight="Medium"
@@ -193,10 +195,46 @@
                     Header="ComfyUI Authentication Headers"
                     IconSource="LockClosed">
                     <ui:SettingsExpander.Footer>
-                        <TextBox
-                            MinWidth="200"
-                            Text="{Binding ComfyUIAuthHeaders}"
-                            Watermark="e.g., {&quot;Authorization&quot;: &quot;Bearer TOKEN&quot;}" />
+                        <StackPanel Spacing="8">
+                            <ui:CommandBar>
+                                <ui:CommandBar.PrimaryCommands>
+                                    <ui:CommandBarButton
+                                        IconSource="Add"
+                                        Label="Add Header"
+                                        Command="{Binding AddAuthHeaderCommand}" />
+                                    <ui:CommandBarButton
+                                        IconSource="Delete"
+                                        Label="Remove Header"
+                                        Command="{Binding RemoveAuthHeaderCommand}"
+                                        CommandParameter="{Binding #AuthHeadersGrid.SelectedIndex}">
+                                        <ui:CommandBarButton.IsEnabled>
+                                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                                <Binding Path="!ComfyUIAuthHeadersView.IsEmpty" />
+                                                <Binding ElementName="AuthHeadersGrid" Path="SelectedItem" Converter="{x:Static ObjectConverters.IsNotNull}" />
+                                            </MultiBinding>
+                                        </ui:CommandBarButton.IsEnabled>
+                                    </ui:CommandBarButton>
+                                </ui:CommandBar.PrimaryCommands>
+                            </ui:CommandBar>
+                            <DataGrid
+                                x:Name="AuthHeadersGrid"
+                                MinHeight="150"
+                                MaxHeight="300"
+                                ItemsSource="{Binding ComfyUIAuthHeadersView}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn
+                                        x:DataType="models:HeaderKeyPair"
+                                        Width="*"
+                                        Header="Header Name"
+                                        Binding="{Binding Key}" />
+                                    <DataGridTextColumn
+                                        x:DataType="models:HeaderKeyPair"
+                                        Width="2*"
+                                        Header="Header Value"
+                                        Binding="{Binding Value}" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
                     </ui:SettingsExpander.Footer>
                 </ui:SettingsExpander>
             </sg:SpacedGrid>

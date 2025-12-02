@@ -353,12 +353,69 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             throw new InvalidOperationException("Client is not connected");
     }
 
+    /// <summary>
+    /// Safely calls an API method and handles HTML responses (common with Cloudflare errors)
+    /// </summary>
+    private async Task<T?> SafeApiCallAsync<T>(
+        Func<Task<T>> apiCall,
+        string operationName,
+        CancellationToken cancellationToken = default
+    ) where T : class
+    {
+        try
+        {
+            logger.LogDebug("Making API call: {Operation} to {BaseAddress}", operationName, Client.BaseAddress);
+            var result = await apiCall().ConfigureAwait(false);
+            logger.LogDebug("API call succeeded: {Operation}", operationName);
+            return result;
+        }
+        catch (Refit.ApiException apiEx)
+        {
+            // Check if response is HTML instead of JSON
+            if (apiEx.Content is { } content && content.TrimStart().StartsWith("<", StringComparison.Ordinal))
+            {
+                // Log first 500 chars of HTML response for debugging
+                var preview = content.Length > 500 ? content[..500] + "..." : content;
+                logger.LogWarning(
+                    apiEx,
+                    "Received HTML response instead of JSON for {Operation} from {Uri}. " +
+                    "This usually indicates the server is returning an error page. " +
+                    "For Cloudflare tunnels, ensure you're using HTTPS and have proper authentication headers. " +
+                    "Response preview: {Preview}",
+                    operationName,
+                    apiEx.Uri ?? Client.BaseAddress,
+                    preview
+                );
+                return null;
+            }
+
+            // Log other API errors but don't fail the entire connection
+            logger.LogWarning(
+                apiEx,
+                "API call failed for {Operation} from {Uri}: {StatusCode} {ReasonPhrase}. " +
+                "Request: {Method} {RequestUri}",
+                operationName,
+                apiEx.Uri ?? Client.BaseAddress,
+                apiEx.StatusCode,
+                apiEx.ReasonPhrase,
+                apiEx.HttpMethod,
+                apiEx.RequestMessage?.RequestUri
+            );
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Unexpected error during {Operation} from {Uri}", operationName, Client.BaseAddress);
+            return null;
+        }
+    }
+
     protected virtual async Task LoadSharedPropertiesAsync()
     {
         EnsureConnected();
 
         // Get model names
-        if (await Client.GetModelNamesAsync() is { } modelNames)
+        if (await SafeApiCallAsync(() => Client.GetModelNamesAsync(), "GetModelNames") is { } modelNames)
         {
             modelsSource.EditDiff(
                 modelNames.Select(HybridModelFile.FromRemote),
@@ -368,8 +425,10 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
 
         // Get control net model names
         if (
-            await Client.GetNodeOptionNamesAsync("ControlNetLoader", "control_net_name") is
-            { } controlNetModelNames
+            await SafeApiCallAsync(
+                () => Client.GetNodeOptionNamesAsync("ControlNetLoader", "control_net_name"),
+                "GetControlNetModelNames"
+            ) is { } controlNetModelNames
         )
         {
             controlNetModelsSource.EditDiff(
@@ -379,7 +438,12 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         }
 
         // Get Lora model names
-        if (await Client.GetNodeOptionNamesAsync("LoraLoader", "lora_name") is { } loraModelNames)
+        if (
+            await SafeApiCallAsync(
+                () => Client.GetNodeOptionNamesAsync("LoraLoader", "lora_name"),
+                "GetLoraModelNames"
+            ) is { } loraModelNames
+        )
         {
             loraModelsSource.EditDiff(
                 loraModelNames.Select(HybridModelFile.FromRemote),
@@ -389,8 +453,10 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
 
         // Get Ultralytics model names
         if (
-            await Client.GetOptionalNodeOptionNamesAsync("UltralyticsDetectorProvider", "model_name") is
-            { } ultralyticsModelNames
+            await SafeApiCallAsync(
+                () => Client.GetOptionalNodeOptionNamesAsync("UltralyticsDetectorProvider", "model_name"),
+                "GetUltralyticsModelNames"
+            ) is { } ultralyticsModelNames
         )
         {
             IEnumerable<HybridModelFile> models =
@@ -402,7 +468,12 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         }
 
         // Get SAM model names
-        if (await Client.GetOptionalNodeOptionNamesAsync("SAMLoader", "model_name") is { } samModelNames)
+        if (
+            await SafeApiCallAsync(
+                () => Client.GetOptionalNodeOptionNamesAsync("SAMLoader", "model_name"),
+                "GetSamModelNames"
+            ) is { } samModelNames
+        )
         {
             IEnumerable<HybridModelFile> models =
             [
@@ -415,7 +486,7 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         // Prompt Expansion indexing is local only
 
         // Fetch sampler names from KSampler node
-        if (await Client.GetSamplerNamesAsync() is { } samplerNames)
+        if (await SafeApiCallAsync(() => Client.GetSamplerNamesAsync(), "GetSamplerNames") is { } samplerNames)
         {
             samplersSource.EditDiff(
                 samplerNames.Select(name => new ComfySampler(name)),
@@ -427,7 +498,10 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
 
         // Add latent upscale methods from LatentUpscale node
         if (
-            await Client.GetNodeOptionNamesAsync("LatentUpscale", "upscale_method") is { } latentUpscalerNames
+            await SafeApiCallAsync(
+                () => Client.GetNodeOptionNamesAsync("LatentUpscale", "upscale_method"),
+                "GetLatentUpscalerNames"
+            ) is { } latentUpscalerNames
         )
         {
             latentUpscalersSource.EditDiff(
@@ -440,7 +514,10 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
 
         // Add Model upscale methods
         if (
-            await Client.GetNodeOptionNamesAsync("UpscaleModelLoader", "model_name") is { } modelUpscalerNames
+            await SafeApiCallAsync(
+                () => Client.GetNodeOptionNamesAsync("UpscaleModelLoader", "model_name"),
+                "GetModelUpscalerNames"
+            ) is { } modelUpscalerNames
         )
         {
             modelUpscalersSource.EditDiff(
@@ -451,7 +528,12 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         }
 
         // Add scheduler names from Scheduler node
-        if (await Client.GetNodeOptionNamesAsync("KSampler", "scheduler") is { } schedulerNames)
+        if (
+            await SafeApiCallAsync(
+                () => Client.GetNodeOptionNamesAsync("KSampler", "scheduler"),
+                "GetSchedulerNames"
+            ) is { } schedulerNames
+        )
         {
             schedulersSource.Edit(updater =>
             {
@@ -466,21 +548,30 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
 
         // Add preprocessor names from Inference_Core_AIO_Preprocessor node (might not exist if no extension)
         if (
-            await Client.GetOptionalNodeOptionNamesAsync("Inference_Core_AIO_Preprocessor", "preprocessor") is
-            { } preprocessorNames
+            await SafeApiCallAsync(
+                () => Client.GetOptionalNodeOptionNamesAsync("Inference_Core_AIO_Preprocessor", "preprocessor"),
+                "GetPreprocessorNames"
+            ) is { } preprocessorNames
         )
         {
             preprocessorsSource.EditDiff(preprocessorNames.Select(n => new ComfyAuxPreprocessor(n)));
         }
 
         // Get Unet model names from UNETLoader node
-        if (await Client.GetNodeOptionNamesAsync("UNETLoader", "unet_name") is { } unetModelNames)
+        if (
+            await SafeApiCallAsync(
+                () => Client.GetNodeOptionNamesAsync("UNETLoader", "unet_name"),
+                "GetUnetModelNames"
+            ) is { } unetModelNames
+        )
         {
             var unetModels = unetModelNames.Select(HybridModelFile.FromRemote);
 
             if (
-                await Client.GetRequiredNodeOptionNamesFromOptionalNodeAsync("UnetLoaderGGUF", "unet_name") is
-                { } ggufModelNames
+                await SafeApiCallAsync(
+                    () => Client.GetRequiredNodeOptionNamesFromOptionalNodeAsync("UnetLoaderGGUF", "unet_name"),
+                    "GetUnetGGUFModelNames"
+                ) is { } ggufModelNames
             )
             {
                 unetModels = unetModels.Concat(ggufModelNames.Select(HybridModelFile.FromRemote));
@@ -490,7 +581,12 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         }
 
         // Get CLIP model names from DualCLIPLoader node
-        if (await Client.GetNodeOptionNamesAsync("DualCLIPLoader", "clip_name1") is { } clipModelNames)
+        if (
+            await SafeApiCallAsync(
+                () => Client.GetNodeOptionNamesAsync("DualCLIPLoader", "clip_name1"),
+                "GetClipModelNames"
+            ) is { } clipModelNames
+        )
         {
             IEnumerable<HybridModelFile> models =
             [
@@ -499,11 +595,13 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             ];
 
             if (
-                await Client.GetRequiredNodeOptionNamesFromOptionalNodeAsync(
-                    "DualCLIPLoaderGGUF",
-                    "clip_name1"
-                ) is
-                { } ggufClipModelNames
+                await SafeApiCallAsync(
+                    () => Client.GetRequiredNodeOptionNamesFromOptionalNodeAsync(
+                        "DualCLIPLoaderGGUF",
+                        "clip_name1"
+                    ),
+                    "GetClipGGUFModelNames"
+                ) is { } ggufClipModelNames
             )
             {
                 models = models.Concat(ggufClipModelNames.Select(HybridModelFile.FromRemote));
@@ -513,7 +611,12 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         }
 
         // Get CLIP Vision model names from CLIPVisionLoader node
-        if (await Client.GetNodeOptionNamesAsync("CLIPVisionLoader", "clip_name") is { } clipVisionModelNames)
+        if (
+            await SafeApiCallAsync(
+                () => Client.GetNodeOptionNamesAsync("CLIPVisionLoader", "clip_name"),
+                "GetClipVisionModelNames"
+            ) is { } clipVisionModelNames
+        )
         {
             IEnumerable<HybridModelFile> models =
             [

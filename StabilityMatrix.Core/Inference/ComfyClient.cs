@@ -120,6 +120,22 @@ public class ComfyClient : InferenceClientBase
             Path = "/ws",
             Query = $"clientId={ClientId}"
         }.Uri;
+        
+        Logger.Debug(
+            "Setting up WebSocket connection: {WebSocketUri} (from base: {BaseUri}, scheme: {Scheme})",
+            wsUri,
+            baseAddress,
+            wsScheme
+        );
+        
+        if (serverSettings.Headers != null && serverSettings.Headers.Count > 0)
+        {
+            Logger.Debug(
+                "WebSocket will include {Count} custom headers: {Headers}",
+                serverSettings.Headers.Count,
+                string.Join(", ", serverSettings.Headers.Keys)
+            );
+        }
 
         // Configure WebSocket factory to inject custom headers
         Func<ClientWebSocket> clientFactory = () =>
@@ -323,13 +339,16 @@ public class ComfyClient : InferenceClientBase
 
             try
             {
+                Logger.Debug("Attempting WebSocket connection to {Uri}...", webSocketClient.Url);
                 await webSocketClient.StartOrFail().ConfigureAwait(false);
+                Logger.Info("WebSocket connection established successfully to {Uri}", webSocketClient.Url);
                 return;
             }
             catch (WebsocketException e)
             {
-                Logger.Info(
-                    "Failed to connect to websocket, retrying in {RetryDelay} ({Message})",
+                Logger.Warn(
+                    "Failed to connect to websocket {Uri}, retrying in {RetryDelay} ({Message})",
+                    webSocketClient.Url,
                     retryDelay,
                     e.Message
                 );
