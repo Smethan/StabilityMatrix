@@ -405,3 +405,4 @@ FodyWeavers.xsd
 #Cline specific files
 memory-bank/
 .env
+CONNECTION_FLOW.md

@@ -360,52 +360,106 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         Func<Task<T>> apiCall,
         string operationName,
         CancellationToken cancellationToken = default
-    ) where T : class
+    )
+        where T : class
     {
         try
         {
-            logger.LogDebug("Making API call: {Operation} to {BaseAddress}", operationName, Client.BaseAddress);
+            logger.LogDebug(
+                "Making API call: {Operation} to {BaseAddress}",
+                operationName,
+                Client.BaseAddress
+            );
             var result = await apiCall().ConfigureAwait(false);
             logger.LogDebug("API call succeeded: {Operation}", operationName);
             return result;
         }
         catch (Refit.ApiException apiEx)
         {
+            // Check if we were redirected to Cloudflare Access
+            var requestUri = apiEx.RequestMessage?.RequestUri?.ToString() ?? "";
+            var isCloudflareAccessRedirect = requestUri.Contains(
+                "cloudflareaccess.com",
+                StringComparison.OrdinalIgnoreCase
+            );
+
             // Check if response is HTML instead of JSON
             if (apiEx.Content is { } content && content.TrimStart().StartsWith("<", StringComparison.Ordinal))
             {
                 // Log first 500 chars of HTML response for debugging
                 var preview = content.Length > 500 ? content[..500] + "..." : content;
-                logger.LogWarning(
-                    apiEx,
-                    "Received HTML response instead of JSON for {Operation} from {Uri}. " +
-                    "This usually indicates the server is returning an error page. " +
-                    "For Cloudflare tunnels, ensure you're using HTTPS and have proper authentication headers. " +
-                    "Response preview: {Preview}",
-                    operationName,
-                    apiEx.Uri ?? Client.BaseAddress,
-                    preview
-                );
+
+                if (isCloudflareAccessRedirect)
+                {
+                    logger.LogWarning(
+                        apiEx,
+                        "Request to {Operation} was redirected to Cloudflare Access login page: {RedirectUri}. "
+                            + "This means authentication headers are missing or incorrect. "
+                            + "Please check your ComfyUI authentication headers configuration in settings. "
+                            + "Cloudflare Access requires specific headers (like CF-Access-Token or CF-Access-Client-Id/Secret) to be set. "
+                            + "Response preview: {Preview}",
+                        operationName,
+                        requestUri,
+                        preview
+                    );
+                }
+                else
+                {
+                    logger.LogWarning(
+                        apiEx,
+                        "Received HTML response instead of JSON for {Operation} from {Uri}. "
+                            + "This usually indicates the server is returning an error page. "
+                            + "For Cloudflare tunnels, ensure you're using HTTPS and have proper authentication headers. "
+                            + "Response preview: {Preview}",
+                        operationName,
+                        apiEx.Uri ?? Client.BaseAddress,
+                        preview
+                    );
+                }
                 return null;
             }
 
             // Log other API errors but don't fail the entire connection
-            logger.LogWarning(
-                apiEx,
-                "API call failed for {Operation} from {Uri}: {StatusCode} {ReasonPhrase}. " +
-                "Request: {Method} {RequestUri}",
-                operationName,
-                apiEx.Uri ?? Client.BaseAddress,
-                apiEx.StatusCode,
-                apiEx.ReasonPhrase,
-                apiEx.HttpMethod,
-                apiEx.RequestMessage?.RequestUri
-            );
+            if (isCloudflareAccessRedirect)
+            {
+                logger.LogWarning(
+                    apiEx,
+                    "API call failed for {Operation} - redirected to Cloudflare Access login: {RedirectUri}. "
+                        + "This indicates authentication headers are missing or incorrect. "
+                        + "Status: {StatusCode} {ReasonPhrase}. "
+                        + "Original request: {Method} {OriginalUri}",
+                    operationName,
+                    requestUri,
+                    apiEx.StatusCode,
+                    apiEx.ReasonPhrase,
+                    apiEx.HttpMethod,
+                    apiEx.Uri ?? Client.BaseAddress
+                );
+            }
+            else
+            {
+                logger.LogWarning(
+                    apiEx,
+                    "API call failed for {Operation} from {Uri}: {StatusCode} {ReasonPhrase}. "
+                        + "Request: {Method} {RequestUri}",
+                    operationName,
+                    apiEx.Uri ?? Client.BaseAddress,
+                    apiEx.StatusCode,
+                    apiEx.ReasonPhrase,
+                    apiEx.HttpMethod,
+                    apiEx.RequestMessage?.RequestUri
+                );
+            }
             return null;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Unexpected error during {Operation} from {Uri}", operationName, Client.BaseAddress);
+            logger.LogWarning(
+                ex,
+                "Unexpected error during {Operation} from {Uri}",
+                operationName,
+                Client.BaseAddress
+            );
             return null;
         }
     }
@@ -428,7 +482,8 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             await SafeApiCallAsync(
                 () => Client.GetNodeOptionNamesAsync("ControlNetLoader", "control_net_name"),
                 "GetControlNetModelNames"
-            ) is { } controlNetModelNames
+            ) is
+            { } controlNetModelNames
         )
         {
             controlNetModelsSource.EditDiff(
@@ -442,7 +497,8 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             await SafeApiCallAsync(
                 () => Client.GetNodeOptionNamesAsync("LoraLoader", "lora_name"),
                 "GetLoraModelNames"
-            ) is { } loraModelNames
+            ) is
+            { } loraModelNames
         )
         {
             loraModelsSource.EditDiff(
@@ -456,7 +512,8 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             await SafeApiCallAsync(
                 () => Client.GetOptionalNodeOptionNamesAsync("UltralyticsDetectorProvider", "model_name"),
                 "GetUltralyticsModelNames"
-            ) is { } ultralyticsModelNames
+            ) is
+            { } ultralyticsModelNames
         )
         {
             IEnumerable<HybridModelFile> models =
@@ -472,7 +529,8 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             await SafeApiCallAsync(
                 () => Client.GetOptionalNodeOptionNamesAsync("SAMLoader", "model_name"),
                 "GetSamModelNames"
-            ) is { } samModelNames
+            ) is
+            { } samModelNames
         )
         {
             IEnumerable<HybridModelFile> models =
@@ -486,7 +544,9 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         // Prompt Expansion indexing is local only
 
         // Fetch sampler names from KSampler node
-        if (await SafeApiCallAsync(() => Client.GetSamplerNamesAsync(), "GetSamplerNames") is { } samplerNames)
+        if (
+            await SafeApiCallAsync(() => Client.GetSamplerNamesAsync(), "GetSamplerNames") is { } samplerNames
+        )
         {
             samplersSource.EditDiff(
                 samplerNames.Select(name => new ComfySampler(name)),
@@ -501,7 +561,8 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             await SafeApiCallAsync(
                 () => Client.GetNodeOptionNamesAsync("LatentUpscale", "upscale_method"),
                 "GetLatentUpscalerNames"
-            ) is { } latentUpscalerNames
+            ) is
+            { } latentUpscalerNames
         )
         {
             latentUpscalersSource.EditDiff(
@@ -517,7 +578,8 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             await SafeApiCallAsync(
                 () => Client.GetNodeOptionNamesAsync("UpscaleModelLoader", "model_name"),
                 "GetModelUpscalerNames"
-            ) is { } modelUpscalerNames
+            ) is
+            { } modelUpscalerNames
         )
         {
             modelUpscalersSource.EditDiff(
@@ -532,7 +594,8 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             await SafeApiCallAsync(
                 () => Client.GetNodeOptionNamesAsync("KSampler", "scheduler"),
                 "GetSchedulerNames"
-            ) is { } schedulerNames
+            ) is
+            { } schedulerNames
         )
         {
             schedulersSource.Edit(updater =>
@@ -549,9 +612,11 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         // Add preprocessor names from Inference_Core_AIO_Preprocessor node (might not exist if no extension)
         if (
             await SafeApiCallAsync(
-                () => Client.GetOptionalNodeOptionNamesAsync("Inference_Core_AIO_Preprocessor", "preprocessor"),
+                () =>
+                    Client.GetOptionalNodeOptionNamesAsync("Inference_Core_AIO_Preprocessor", "preprocessor"),
                 "GetPreprocessorNames"
-            ) is { } preprocessorNames
+            ) is
+            { } preprocessorNames
         )
         {
             preprocessorsSource.EditDiff(preprocessorNames.Select(n => new ComfyAuxPreprocessor(n)));
@@ -562,16 +627,19 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             await SafeApiCallAsync(
                 () => Client.GetNodeOptionNamesAsync("UNETLoader", "unet_name"),
                 "GetUnetModelNames"
-            ) is { } unetModelNames
+            ) is
+            { } unetModelNames
         )
         {
             var unetModels = unetModelNames.Select(HybridModelFile.FromRemote);
 
             if (
                 await SafeApiCallAsync(
-                    () => Client.GetRequiredNodeOptionNamesFromOptionalNodeAsync("UnetLoaderGGUF", "unet_name"),
+                    () =>
+                        Client.GetRequiredNodeOptionNamesFromOptionalNodeAsync("UnetLoaderGGUF", "unet_name"),
                     "GetUnetGGUFModelNames"
-                ) is { } ggufModelNames
+                ) is
+                { } ggufModelNames
             )
             {
                 unetModels = unetModels.Concat(ggufModelNames.Select(HybridModelFile.FromRemote));
@@ -585,7 +653,8 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             await SafeApiCallAsync(
                 () => Client.GetNodeOptionNamesAsync("DualCLIPLoader", "clip_name1"),
                 "GetClipModelNames"
-            ) is { } clipModelNames
+            ) is
+            { } clipModelNames
         )
         {
             IEnumerable<HybridModelFile> models =
@@ -596,12 +665,14 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
 
             if (
                 await SafeApiCallAsync(
-                    () => Client.GetRequiredNodeOptionNamesFromOptionalNodeAsync(
-                        "DualCLIPLoaderGGUF",
-                        "clip_name1"
-                    ),
+                    () =>
+                        Client.GetRequiredNodeOptionNamesFromOptionalNodeAsync(
+                            "DualCLIPLoaderGGUF",
+                            "clip_name1"
+                        ),
                     "GetClipGGUFModelNames"
-                ) is { } ggufClipModelNames
+                ) is
+                { } ggufClipModelNames
             )
             {
                 models = models.Concat(ggufClipModelNames.Select(HybridModelFile.FromRemote));
@@ -615,7 +686,8 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             await SafeApiCallAsync(
                 () => Client.GetNodeOptionNamesAsync("CLIPVisionLoader", "clip_name"),
                 "GetClipVisionModelNames"
-            ) is { } clipVisionModelNames
+            ) is
+            { } clipVisionModelNames
         )
         {
             IEnumerable<HybridModelFile> models =
@@ -869,12 +941,15 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
             logger.LogDebug("Connecting to {@Uri}...", uri);
 
             // Warn if HTTP is used with a domain that looks like it should be HTTPS
-            if (uri.Scheme == "http" && !uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) 
-                && !uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase))
+            if (
+                uri.Scheme == "http"
+                && !uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+                && !uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase)
+            )
             {
                 logger.LogWarning(
-                    "Using HTTP with remote domain '{Host}'. Cloudflare tunnels and most remote servers require HTTPS. " +
-                    "Consider using 'https://{Host}' instead.",
+                    "Using HTTP with remote domain '{Host}'. Cloudflare tunnels and most remote servers require HTTPS. "
+                        + "Consider using 'https://{Host}' instead.",
                     uri.Host,
                     uri.Host
                 );
@@ -895,52 +970,52 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         catch (Refit.ApiException apiEx)
         {
             Client = null;
-            
+
             // Check if the response is HTML instead of JSON (common with Cloudflare errors)
             if (apiEx.Content is { } content && content.TrimStart().StartsWith("<", StringComparison.Ordinal))
             {
                 logger.LogError(
                     apiEx,
-                    "Received HTML response instead of JSON from {Uri}. " +
-                    "This usually means the server is returning an error page. " +
-                    "For Cloudflare tunnels, ensure you're using HTTPS and have proper authentication headers configured.",
+                    "Received HTML response instead of JSON from {Uri}. "
+                        + "This usually means the server is returning an error page. "
+                        + "For Cloudflare tunnels, ensure you're using HTTPS and have proper authentication headers configured.",
                     uri
                 );
                 throw new InvalidOperationException(
-                    $"Server returned HTML instead of JSON. This usually indicates:\n" +
-                    $"1. The URL should use HTTPS instead of HTTP (e.g., https://{uri.Host})\n" +
-                    $"2. Authentication headers may be missing or incorrect\n" +
-                    $"3. The server may be blocking the request\n\n" +
-                    $"Original error: {apiEx.Message}",
+                    $"Server returned HTML instead of JSON. This usually indicates:\n"
+                        + $"1. The URL should use HTTPS instead of HTTP (e.g., https://{uri.Host})\n"
+                        + $"2. Authentication headers may be missing or incorrect\n"
+                        + $"3. The server may be blocking the request\n\n"
+                        + $"Original error: {apiEx.Message}",
                     apiEx
                 );
             }
-            
+
             throw;
         }
         catch (Exception ex)
         {
             Client = null;
-            
+
             // Check for WebSocket connection errors
             if (ex.Message.Contains("status code '200'") && ex.Message.Contains("status code '101'"))
             {
                 logger.LogError(
                     ex,
-                    "WebSocket connection failed: Server returned HTTP 200 instead of 101 (WebSocket upgrade). " +
-                    "For Cloudflare tunnels, ensure you're using HTTPS (wss://) and have proper authentication headers."
+                    "WebSocket connection failed: Server returned HTTP 200 instead of 101 (WebSocket upgrade). "
+                        + "For Cloudflare tunnels, ensure you're using HTTPS (wss://) and have proper authentication headers."
                 );
                 throw new InvalidOperationException(
-                    $"WebSocket connection failed. The server returned HTTP 200 instead of upgrading to WebSocket (101).\n\n" +
-                    $"This usually means:\n" +
-                    $"1. Use HTTPS instead of HTTP (e.g., https://{uri.Host} instead of http://{uri.Host})\n" +
-                    $"2. Cloudflare tunnels require HTTPS/WSS connections\n" +
-                    $"3. Authentication headers may be required\n\n" +
-                    $"Original error: {ex.Message}",
+                    $"WebSocket connection failed. The server returned HTTP 200 instead of upgrading to WebSocket (101).\n\n"
+                        + $"This usually means:\n"
+                        + $"1. Use HTTPS instead of HTTP (e.g., https://{uri.Host} instead of http://{uri.Host})\n"
+                        + $"2. Cloudflare tunnels require HTTPS/WSS connections\n"
+                        + $"3. Authentication headers may be required\n\n"
+                        + $"Original error: {ex.Message}",
                     ex
                 );
             }
-            
+
             throw;
         }
         finally
@@ -962,17 +1037,69 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         {
             try
             {
-                var headers = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(authHeadersJson);
-                if (headers != null)
+                logger.LogDebug(
+                    "Parsing ComfyUI auth headers from JSON: {JsonLength} characters",
+                    authHeadersJson.Length
+                );
+                var headers = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(
+                    authHeadersJson
+                );
+                if (headers != null && headers.Count > 0)
                 {
-                    settings.Headers = headers;
-                    logger.LogDebug("Loaded {Count} auth headers from user settings", headers.Count);
+                    // Filter out empty/null values
+                    var validHeaders = headers
+                        .Where(kvp =>
+                            !string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value)
+                        )
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+                    if (validHeaders.Count > 0)
+                    {
+                        settings.Headers = validHeaders;
+                        logger.LogDebug(
+                            "Loaded {Count} valid auth headers from user settings: {HeaderNames}",
+                            validHeaders.Count,
+                            string.Join(", ", validHeaders.Keys)
+                        );
+
+                        // Log header values in trace mode (but mask sensitive values)
+                        if (logger.IsEnabled(LogLevel.Trace))
+                        {
+                            foreach (var header in validHeaders)
+                            {
+                                var maskedValue =
+                                    header.Value.Length > 8
+                                        ? header.Value[..4] + "..." + header.Value[^4..]
+                                        : "***";
+                                logger.LogTrace("Header '{Key}' = '{Value}'", header.Key, maskedValue);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        logger.LogWarning(
+                            "Parsed {TotalCount} headers but none were valid (all had empty keys or values)",
+                            headers.Count
+                        );
+                    }
+                }
+                else
+                {
+                    logger.LogWarning("Parsed headers dictionary was null or empty");
                 }
             }
             catch (System.Text.Json.JsonException ex)
             {
-                logger.LogWarning(ex, "Failed to parse ComfyUI auth headers from user settings");
+                logger.LogError(
+                    ex,
+                    "Failed to parse ComfyUI auth headers from user settings. JSON: {JsonPreview}",
+                    authHeadersJson.Length > 100 ? authHeadersJson[..100] + "..." : authHeadersJson
+                );
             }
+        }
+        else
+        {
+            logger.LogDebug("No ComfyUI auth headers configured in user settings");
         }
 
         return settings;
@@ -1024,9 +1151,13 @@ public partial class InferenceClientManager : ObservableObject, IInferenceClient
         Uri uri;
 
         // Check if host is a full URL (starts with http:// or https://)
-        if (!string.IsNullOrWhiteSpace(host) && 
-            (host.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || 
-             host.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+        if (
+            !string.IsNullOrWhiteSpace(host)
+            && (
+                host.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || host.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            )
+        )
         {
             // Use the URL directly
             if (Uri.TryCreate(host, UriKind.Absolute, out var parsedUri))

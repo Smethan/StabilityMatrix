@@ -757,7 +757,8 @@ public sealed class App : Application
 
         // Add Refit client factory
         services.AddSingleton<IApiFactory, ApiFactory>(provider => new ApiFactory(
-            provider.GetRequiredService<IHttpClientFactory>()
+            provider.GetRequiredService<IHttpClientFactory>(),
+            provider.GetService<ILogger<ApiFactory>>()
         )
         {
             RefitSettings = apiFactoryRefitSettings,
