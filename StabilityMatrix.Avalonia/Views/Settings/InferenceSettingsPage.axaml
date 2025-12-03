@@ -1,15 +1,15 @@
-<controls:UserControlBase
+﻿<controls:UserControlBase
     x:Class="StabilityMatrix.Avalonia.Views.Settings.InferenceSettingsPage"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="clr-namespace:StabilityMatrix.Avalonia.Controls"
+    xmlns:converters="clr-namespace:StabilityMatrix.Avalonia.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:fluentIcons="clr-namespace:FluentIcons.Avalonia.Fluent;assembly=FluentIcons.Avalonia.Fluent"
     xmlns:inference="clr-namespace:StabilityMatrix.Avalonia.Models.Inference"
     xmlns:lang="clr-namespace:StabilityMatrix.Avalonia.Languages"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:mocks="clr-namespace:StabilityMatrix.Avalonia.DesignData"
-    xmlns:converters="clr-namespace:StabilityMatrix.Avalonia.Converters"
     xmlns:models="clr-namespace:StabilityMatrix.Core.Models;assembly=StabilityMatrix.Core"
     xmlns:models1="clr-namespace:StabilityMatrix.Core.Models;assembly=StabilityMatrix.Core"
     xmlns:native="clr-namespace:StabilityMatrix.Native;assembly=StabilityMatrix.Native"
@@ -192,48 +192,93 @@
 
                 <ui:SettingsExpander
                     Grid.Row="2"
+                    Description="Add custom HTTP headers for authenticating with remote ComfyUI servers (e.g., Cloudflare Access tokens). Headers are sent with every HTTP and WebSocket request."
                     Header="ComfyUI Authentication Headers"
                     IconSource="LockClosed">
                     <ui:SettingsExpander.Footer>
-                        <StackPanel Spacing="8">
+                        <StackPanel Spacing="12">
+                            <!--  Help Text  -->
+                            <Border
+                                Padding="12"
+                                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4">
+                                <StackPanel Spacing="6">
+                                    <TextBlock FontWeight="SemiBold" Text="How to add headers:" />
+                                    <TextBlock
+                                        FontSize="12"
+                                        Text="1. Click 'Add Header' to create a new row&#x0a;2. Enter the header name (e.g., CF-Access-Token)&#x0a;3. Enter the header value (your token or key)&#x0a;4. Headers are saved automatically"
+                                        TextWrapping="Wrap" />
+                                    <TextBlock
+                                        Margin="0,8,0,0"
+                                        FontSize="12"
+                                        FontStyle="Italic"
+                                        Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                        Text="Common examples: CF-Access-Token, Authorization, X-API-Key"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+
                             <ui:CommandBar>
                                 <ui:CommandBar.PrimaryCommands>
                                     <ui:CommandBarButton
+                                        Command="{Binding AddAuthHeaderCommand}"
                                         IconSource="Add"
-                                        Label="Add Header"
-                                        Command="{Binding AddAuthHeaderCommand}" />
+                                        Label="Add Header" />
                                     <ui:CommandBarButton
-                                        IconSource="Delete"
-                                        Label="Remove Header"
                                         Command="{Binding RemoveAuthHeaderCommand}"
-                                        CommandParameter="{Binding #AuthHeadersGrid.SelectedIndex}">
+                                        CommandParameter="{Binding #AuthHeadersGrid.SelectedIndex}"
+                                        IconSource="Delete"
+                                        Label="Remove Header">
                                         <ui:CommandBarButton.IsEnabled>
                                             <MultiBinding Converter="{x:Static BoolConverters.And}">
                                                 <Binding Path="!ComfyUIAuthHeadersView.IsEmpty" />
-                                                <Binding ElementName="AuthHeadersGrid" Path="SelectedItem" Converter="{x:Static ObjectConverters.IsNotNull}" />
+                                                <Binding
+                                                    Converter="{x:Static ObjectConverters.IsNotNull}"
+                                                    ElementName="AuthHeadersGrid"
+                                                    Path="SelectedItem" />
                                             </MultiBinding>
                                         </ui:CommandBarButton.IsEnabled>
                                     </ui:CommandBarButton>
                                 </ui:CommandBar.PrimaryCommands>
                             </ui:CommandBar>
+
                             <DataGrid
                                 x:Name="AuthHeadersGrid"
                                 MinHeight="150"
                                 MaxHeight="300"
+                                AutoGenerateColumns="False"
+                                CanUserAddRows="False"
+                                CanUserDeleteRows="False"
+                                GridLinesVisibility="Horizontal"
+                                HeadersVisibility="Column"
                                 ItemsSource="{Binding ComfyUIAuthHeadersView}">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn
-                                        x:DataType="models:HeaderKeyPair"
-                                        Width="*"
-                                        Header="Header Name"
-                                        Binding="{Binding Key}" />
-                                    <DataGridTextColumn
-                                        x:DataType="models:HeaderKeyPair"
-                                        Width="2*"
-                                        Header="Header Value"
-                                        Binding="{Binding Value}" />
+                                    <DataGridTemplateColumn Width="*" Header="Header Name">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBox Text="{Binding Key, UpdateSourceTrigger=PropertyChanged}" Watermark="e.g., CF-Access-Token" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Width="2*" Header="Header Value">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Watermark="Enter your token or key value" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                 </DataGrid.Columns>
                             </DataGrid>
+
+                            <!--  Validation Message  -->
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="{DynamicResource SystemControlErrorTextForegroundBrush}"
+                                IsVisible="{Binding AuthHeadersValidationMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                Text="{Binding AuthHeadersValidationMessage}"
+                                TextWrapping="Wrap" />
                         </StackPanel>
                     </ui:SettingsExpander.Footer>
                 </ui:SettingsExpander>

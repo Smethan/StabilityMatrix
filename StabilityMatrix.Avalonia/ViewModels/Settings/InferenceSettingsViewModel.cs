@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.ComponentModel.DataAnnotations;
@@ -84,6 +86,9 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
     [NotifyPropertyChangedFor(nameof(ComfyUIAuthHeadersView))]
     private ObservableCollection<HeaderKeyPair> comfyUIAuthHeaders = new();
 
+    [ObservableProperty]
+    private string? authHeadersValidationMessage;
+
     public DataGridCollectionView ComfyUIAuthHeadersView => new(ComfyUIAuthHeaders);
 
     private List<string> ignoredFileNameFormatVars =
@@ -160,9 +165,16 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
             {
                 foreach (HeaderKeyPair item in e.NewItems)
                 {
-                    item.PropertyChanged += (_, _) => SaveHeadersToSettings();
+                    item.PropertyChanged += (_, _) =>
+                    {
+                        SaveHeadersToSettings();
+                        // Also validate when individual headers change
+                        AuthHeadersValidationMessage = ValidateHeaders();
+                    };
                 }
             }
+            // Validate when collection changes (add/remove)
+            AuthHeadersValidationMessage = ValidateHeaders();
         };
 
         // Load headers from settings on initialization
@@ -299,14 +311,94 @@ public partial class InferenceSettingsViewModel : PageViewModelBase
     /// </summary>
     private void SaveHeadersToSettings()
     {
+        // Validate headers before saving
+        var validationResult = ValidateHeaders();
+        AuthHeadersValidationMessage = validationResult;
+
         // Convert collection to JSON string for storage
+        // Only include headers with non-empty keys
         var headersDict = ComfyUIAuthHeaders
             .Where(h => !string.IsNullOrWhiteSpace(h.Key))
-            .ToDictionary(h => h.Key, h => h.Value ?? string.Empty);
+            .ToDictionary(h => h.Key.Trim(), h => (h.Value ?? string.Empty).Trim());
+
+        // Check for duplicate keys
+        var duplicateKeys = headersDict
+            .GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        if (duplicateKeys.Count > 0)
+        {
+            AuthHeadersValidationMessage =
+                $"Warning: Duplicate header names found: {string.Join(", ", duplicateKeys)}. Only the last value will be used.";
+            // Remove duplicates, keeping the last occurrence
+            headersDict = ComfyUIAuthHeaders
+                .Where(h => !string.IsNullOrWhiteSpace(h.Key))
+                .GroupBy(h => h.Key.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => (g.Last().Value ?? string.Empty).Trim());
+        }
 
         var json = headersDict.Count > 0 ? JsonSerializer.Serialize(headersDict) : null;
 
         settingsManager.Transaction(settings => settings.ComfyUIAuthHeaders = json);
+    }
+
+    /// <summary>
+    /// Validates the headers collection and returns a validation message if there are issues
+    /// </summary>
+    private string? ValidateHeaders()
+    {
+        if (ComfyUIAuthHeaders.Count == 0)
+        {
+            return null; // Empty is fine
+        }
+
+        var issues = new List<string>();
+
+        // Check for headers with empty keys but non-empty values
+        var headersWithEmptyKeys = ComfyUIAuthHeaders
+            .Where(h => string.IsNullOrWhiteSpace(h.Key) && !string.IsNullOrWhiteSpace(h.Value))
+            .ToList();
+
+        if (headersWithEmptyKeys.Count > 0)
+        {
+            issues.Add($"{headersWithEmptyKeys.Count} header(s) have empty names but contain values");
+        }
+
+        // Check for headers with keys but empty values
+        var headersWithEmptyValues = ComfyUIAuthHeaders
+            .Where(h => !string.IsNullOrWhiteSpace(h.Key) && string.IsNullOrWhiteSpace(h.Value))
+            .ToList();
+
+        if (headersWithEmptyValues.Count > 0)
+        {
+            issues.Add($"{headersWithEmptyValues.Count} header(s) have names but empty values");
+        }
+
+        // Check for invalid header names (restricted headers)
+        var restrictedHeaders = new[] { "Host", "Connection", "Content-Length", "Transfer-Encoding" };
+        var invalidHeaders = ComfyUIAuthHeaders
+            .Where(h =>
+                !string.IsNullOrWhiteSpace(h.Key)
+                && restrictedHeaders.Contains(h.Key.Trim(), StringComparer.OrdinalIgnoreCase)
+            )
+            .Select(h => h.Key)
+            .ToList();
+
+        if (invalidHeaders.Count > 0)
+        {
+            issues.Add(
+                $"Invalid header name(s): {string.Join(", ", invalidHeaders)}. These are system-managed headers."
+            );
+        }
+
+        if (issues.Count > 0)
+        {
+            return string.Join("; ", issues);
+        }
+
+        return null;
     }
 
     [RelayCommand]
