@@ -1,5 +1,4 @@
 ﻿using System.Net.Http;
-using System.Reflection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Refit;
@@ -49,14 +48,16 @@ public class ApiFactory : IApiFactory
     {
         HttpClient httpClient;
 
-        // Always start with a factory-created client to get proper configuration
-        // (timeout, retry policies, etc.)
-        var factoryClient = httpClientFactory.CreateClient(nameof(T));
-        factoryClient.BaseAddress = baseAddress;
-
-        // If headers are provided, we need to wrap the factory's handler with our custom handler chain
+        // If headers are provided, we need to create a custom handler chain
         if (defaultHeaders != null && defaultHeaders.Count > 0)
         {
+            logger?.LogDebug(
+                "Creating Refit client for {Type} with {HeaderCount} custom headers: {HeaderNames}",
+                typeof(T).Name,
+                defaultHeaders.Count,
+                string.Join(", ", defaultHeaders.Keys)
+            );
+
             // Create ComfyServerSettings with the headers
             var serverSettings = new ComfyServerSettings
             {
@@ -66,43 +67,41 @@ public class ApiFactory : IApiFactory
             // Wrap in IOptions
             var options = Options.Create(serverSettings);
 
-            // Extract the factory's handler chain using reflection
-            // The factory client's handler contains retry policies and other configurations
-            // We need to wrap it with our custom handlers to preserve those settings
-            var factoryHandler = GetHandlerFromHttpClient(factoryClient, logger);
-
             // Create typed loggers for each handler
             var cookieLogger = loggerFactory?.CreateLogger<CloudflareCookieHandler>();
             var authLogger = loggerFactory?.CreateLogger<AuthHeaderHandler>();
             var redirectLogger = loggerFactory?.CreateLogger<CloudflareAccessRedirectHandler>();
 
-            // Create handler chain:
-            // CloudflareAccessRedirectHandler (outermost - detects redirects)
-            // -> CloudflareCookieHandler (manages CF_Authorization cookies)
-            // -> AuthHeaderHandler (adds custom headers)
-            // -> Factory's handler chain (preserves timeout, retry policies, etc.)
-            var cookieHandler = new CloudflareCookieHandler(cookieLogger) { InnerHandler = factoryHandler };
+            // Create the base handler with cookie support
+            // This will be the innermost handler that actually sends HTTP requests
+            var baseHandler = new HttpClientHandler
+            {
+                UseCookies = true,
+                CookieContainer = new System.Net.CookieContainer(),
+            };
+
+            // Build handler chain from innermost to outermost:
+            // 1. HttpClientHandler (baseHandler) - sends requests, handles cookies
+            // 2. CloudflareCookieHandler - logs cookie activity
+            // 3. AuthHeaderHandler - adds custom headers
+            // 4. CloudflareAccessRedirectHandler - detects redirects
+            var cookieHandler = new CloudflareCookieHandler(cookieLogger) { InnerHandler = baseHandler };
             var authHandler = new AuthHeaderHandler(options, authLogger) { InnerHandler = cookieHandler };
             var redirectHandler = new CloudflareAccessRedirectHandler(options, redirectLogger)
             {
                 InnerHandler = authHandler,
             };
 
-            logger?.LogDebug(
-                "Created HTTP handler chain with {HeaderCount} headers: {HeaderNames}",
-                defaultHeaders.Count,
-                string.Join(", ", defaultHeaders.Keys)
-            );
-
-            // Dispose the factory client and create a new one with our handler chain
-            // but preserve the timeout and other settings
-            var timeout = factoryClient.Timeout;
-            factoryClient.Dispose();
-
-            httpClient = new HttpClient(redirectHandler) { BaseAddress = baseAddress, Timeout = timeout };
+            // Create HttpClient with our custom handler chain
+            // Use a reasonable default timeout (60 seconds) since we're not using factory client
+            httpClient = new HttpClient(redirectHandler)
+            {
+                BaseAddress = baseAddress,
+                Timeout = TimeSpan.FromSeconds(60),
+            };
 
             logger?.LogDebug(
-                "Created Refit client for {Type} with {HeaderCount} authentication headers and cookie support",
+                "Created Refit client for {Type} with custom handler chain and {HeaderCount} authentication headers",
                 typeof(T).Name,
                 defaultHeaders.Count
             );
@@ -110,42 +109,10 @@ public class ApiFactory : IApiFactory
         else
         {
             // No headers, use the factory client as-is
-            httpClient = factoryClient;
+            httpClient = httpClientFactory.CreateClient(nameof(T));
+            httpClient.BaseAddress = baseAddress;
         }
 
         return RestService.For<T>(httpClient, refitSettings);
-    }
-
-    /// <summary>
-    /// Extracts the HttpMessageHandler from an HttpClient using reflection.
-    /// This is needed to wrap the factory's handler chain with our custom handlers
-    /// while preserving retry policies and other handler-level configurations.
-    /// </summary>
-    private static HttpMessageHandler GetHandlerFromHttpClient(
-        HttpClient client,
-        ILogger<ApiFactory>? logger = null
-    )
-    {
-        // HttpClient stores its handler in a private field. We use reflection to extract it
-        // so we can wrap it with our custom handlers while preserving the factory's configuration.
-        var handlerField =
-            typeof(HttpClient).GetField("_handler", BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? typeof(HttpClient).GetField("handler", BindingFlags.NonPublic | BindingFlags.Instance);
-
-        if (handlerField?.GetValue(client) is HttpMessageHandler factoryHandler)
-        {
-            return factoryHandler;
-        }
-
-        // Fallback: if we can't extract the handler, create a new HttpClientHandler
-        // This should rarely happen, but ensures we don't break if HttpClient's internals change
-        logger?.LogWarning(
-            "Could not extract handler from factory HttpClient, using new HttpClientHandler as fallback"
-        );
-        return new HttpClientHandler
-        {
-            UseCookies = true,
-            CookieContainer = new System.Net.CookieContainer(),
-        };
     }
 }

@@ -40,40 +40,99 @@ public class AuthHeaderHandler : DelegatingHandler
                 request.RequestUri
             );
 
+            var addedHeaders = new List<string>();
+            var failedHeaders = new List<string>();
+
             foreach (var header in _settings.Headers)
             {
+                // Validate header name and value
+                if (string.IsNullOrWhiteSpace(header.Key))
+                {
+                    _logger?.LogWarning("Skipping header with empty key");
+                    failedHeaders.Add("(empty key)");
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(header.Value))
+                {
+                    _logger?.LogWarning("Skipping header '{HeaderName}' with empty value", header.Key);
+                    failedHeaders.Add(header.Key);
+                    continue;
+                }
+
                 // Try to add as a request header first
+                // Most custom headers (like CF-Access-Token) should work with TryAddWithoutValidation
                 var added = request.Headers.TryAddWithoutValidation(header.Key, header.Value);
 
                 if (!added)
                 {
-                    // If that fails, try adding to Content headers (for POST requests with content)
-                    // Some headers might be restricted and need special handling
-                    _logger?.LogWarning(
-                        "Failed to add header '{HeaderName}' as request header, trying content headers",
-                        header.Key
-                    );
+                    // Check if it's a restricted header that needs special handling
+                    // Restricted headers include: Host, Content-Length, Connection, etc.
+                    // Custom headers like CF-Access-Token should NOT be restricted
+                    var isRestrictedHeader = IsRestrictedHeader(header.Key);
 
-                    // For restricted headers like Authorization, we might need to use a different approach
-                    // But most custom headers should work with TryAddWithoutValidation
-                    if (request.Content != null)
+                    if (isRestrictedHeader)
                     {
-                        added = request.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
-                    }
-
-                    if (!added)
-                    {
-                        _logger?.LogError(
-                            "Failed to add header '{HeaderName}' to request. "
-                                + "This might be a restricted header or the header name/value format is invalid.",
+                        _logger?.LogWarning(
+                            "Header '{HeaderName}' is a restricted header and cannot be added via TryAddWithoutValidation. "
+                                + "This header may need to be set via HttpClient.DefaultRequestHeaders or a different mechanism.",
                             header.Key
                         );
+                        failedHeaders.Add(header.Key);
+                    }
+                    else
+                    {
+                        // For non-restricted headers that fail, this is unexpected
+                        // Try adding to Content headers as a fallback (though this usually won't work for request headers)
+                        if (request.Content != null)
+                        {
+                            added = request.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                        }
+
+                        if (!added)
+                        {
+                            _logger?.LogError(
+                                "Failed to add header '{HeaderName}' to request. "
+                                    + "Header name/value format may be invalid, or the header may already be present.",
+                                header.Key
+                            );
+                            failedHeaders.Add(header.Key);
+                        }
+                        else
+                        {
+                            _logger?.LogWarning(
+                                "Added header '{HeaderName}' to content headers (unusual for request headers)",
+                                header.Key
+                            );
+                            addedHeaders.Add(header.Key);
+                        }
                     }
                 }
                 else
                 {
+                    addedHeaders.Add(header.Key);
                     _logger?.LogTrace("Successfully added header '{HeaderName}'", header.Key);
                 }
+            }
+
+            // Log summary
+            if (failedHeaders.Count > 0)
+            {
+                _logger?.LogError(
+                    "Failed to add {FailedCount} header(s): {FailedHeaders}. "
+                        + "Requests may fail authentication. Check header names and values.",
+                    failedHeaders.Count,
+                    string.Join(", ", failedHeaders)
+                );
+            }
+
+            if (addedHeaders.Count > 0)
+            {
+                _logger?.LogDebug(
+                    "Successfully added {AddedCount} header(s): {AddedHeaders}",
+                    addedHeaders.Count,
+                    string.Join(", ", addedHeaders)
+                );
             }
 
             // Log all headers that were added (for debugging)
@@ -95,5 +154,28 @@ public class AuthHeaderHandler : DelegatingHandler
         }
 
         return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Checks if a header name is a restricted header that cannot be set via TryAddWithoutValidation.
+    /// Restricted headers are managed by HttpClient/HttpClientHandler and cannot be modified.
+    /// </summary>
+    private static bool IsRestrictedHeader(string headerName)
+    {
+        // Common restricted headers that HttpClient manages automatically
+        var restrictedHeaders = new[]
+        {
+            "Host",
+            "Connection",
+            "Content-Length",
+            "Transfer-Encoding",
+            "Upgrade",
+            "Proxy-Connection",
+            "Keep-Alive",
+            "TE",
+            "Trailer",
+        };
+
+        return restrictedHeaders.Contains(headerName, StringComparer.OrdinalIgnoreCase);
     }
 }
