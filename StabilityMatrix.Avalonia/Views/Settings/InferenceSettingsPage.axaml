@@ -196,30 +196,7 @@
                     Header="ComfyUI Authentication Headers"
                     IconSource="LockClosed">
                     <ui:SettingsExpander.Footer>
-                        <StackPanel Spacing="12">
-                            <!--  Help Text  -->
-                            <Border
-                                Padding="12"
-                                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
-                                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                                BorderThickness="1"
-                                CornerRadius="4">
-                                <StackPanel Spacing="6">
-                                    <TextBlock FontWeight="SemiBold" Text="How to add headers:" />
-                                    <TextBlock
-                                        FontSize="12"
-                                        Text="1. Click 'Add Header' to create a new row&#x0a;2. Enter the header name (e.g., CF-Access-Token)&#x0a;3. Enter the header value (your token or key)&#x0a;4. Headers are saved automatically"
-                                        TextWrapping="Wrap" />
-                                    <TextBlock
-                                        Margin="0,8,0,0"
-                                        FontSize="12"
-                                        FontStyle="Italic"
-                                        Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                                        Text="Common examples: CF-Access-Token, Authorization, X-API-Key"
-                                        TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
-
+                        <StackPanel Spacing="8">
                             <ui:CommandBar>
                                 <ui:CommandBar.PrimaryCommands>
                                     <ui:CommandBarButton
@@ -246,23 +223,33 @@
 
                             <DataGrid
                                 x:Name="AuthHeadersGrid"
-                                MinHeight="150"
-                                MaxHeight="300"
+                                Height="200"
+                                HorizontalAlignment="Stretch"
                                 AutoGenerateColumns="False"
                                 GridLinesVisibility="Horizontal"
                                 HeadersVisibility="Column"
+                                HorizontalScrollBarVisibility="Disabled"
                                 ItemsSource="{Binding ComfyUIAuthHeadersView}">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn
-                                        Width="*"
+                                        Width="0.4*"
                                         Binding="{ReflectionBinding Key}"
                                         Header="Header Name" />
                                     <DataGridTextColumn
-                                        Width="2*"
+                                        Width="0.6*"
                                         Binding="{ReflectionBinding Value}"
                                         Header="Header Value" />
                                 </DataGrid.Columns>
                             </DataGrid>
+
+                            <!--  Compact Help Text  -->
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                TextWrapping="Wrap">
+                                <Run FontWeight="SemiBold" Text="Tip: " />
+                                <Run Text="Enter header name (e.g., CF-Access-Token) and value. Headers are saved automatically." />
+                            </TextBlock>
 
                             <!--  Validation Message  -->
                             <TextBlock
