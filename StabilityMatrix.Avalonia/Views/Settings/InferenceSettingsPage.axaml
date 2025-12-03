@@ -249,22 +249,20 @@
                                 MinHeight="150"
                                 MaxHeight="300"
                                 AutoGenerateColumns="False"
-                                CanUserAddRows="False"
-                                CanUserDeleteRows="False"
                                 GridLinesVisibility="Horizontal"
                                 HeadersVisibility="Column"
                                 ItemsSource="{Binding ComfyUIAuthHeadersView}">
                                 <DataGrid.Columns>
                                     <DataGridTemplateColumn Width="*" Header="Header Name">
                                         <DataGridTemplateColumn.CellTemplate>
-                                            <DataTemplate>
+                                            <DataTemplate x:DataType="models:HeaderKeyPair">
                                                 <TextBox Text="{Binding Key, UpdateSourceTrigger=PropertyChanged}" Watermark="e.g., CF-Access-Token" />
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
                                     <DataGridTemplateColumn Width="2*" Header="Header Value">
                                         <DataGridTemplateColumn.CellTemplate>
-                                            <DataTemplate>
+                                            <DataTemplate x:DataType="models:HeaderKeyPair">
                                                 <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Watermark="Enter your token or key value" />
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
