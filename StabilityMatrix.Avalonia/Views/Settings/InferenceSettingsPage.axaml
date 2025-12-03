@@ -255,11 +255,11 @@
                                 <DataGrid.Columns>
                                     <DataGridTextColumn
                                         Width="*"
-                                        Binding="{Binding Key}"
+                                        Binding="{ReflectionBinding Key}"
                                         Header="Header Name" />
                                     <DataGridTextColumn
                                         Width="2*"
-                                        Binding="{Binding Value}"
+                                        Binding="{ReflectionBinding Value}"
                                         Header="Header Value" />
                                 </DataGrid.Columns>
                             </DataGrid>
