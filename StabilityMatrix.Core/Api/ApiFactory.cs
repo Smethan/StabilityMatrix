@@ -12,12 +12,18 @@ public class ApiFactory : IApiFactory
 {
     private readonly IHttpClientFactory httpClientFactory;
     private readonly ILogger<ApiFactory>? logger;
+    private readonly ILoggerFactory? loggerFactory;
     public RefitSettings? RefitSettings { get; init; }
 
-    public ApiFactory(IHttpClientFactory httpClientFactory, ILogger<ApiFactory>? logger = null)
+    public ApiFactory(
+        IHttpClientFactory httpClientFactory,
+        ILogger<ApiFactory>? logger = null,
+        ILoggerFactory? loggerFactory = null
+    )
     {
         this.httpClientFactory = httpClientFactory;
         this.logger = logger;
+        this.loggerFactory = loggerFactory;
     }
 
     public T CreateRefitClient<T>(Uri baseAddress)
@@ -41,6 +47,8 @@ public class ApiFactory : IApiFactory
         IReadOnlyDictionary<string, string>? defaultHeaders
     )
     {
+        HttpClient httpClient;
+
         // Always start with a factory-created client to get proper configuration
         // (timeout, retry policies, etc.)
         var factoryClient = httpClientFactory.CreateClient(nameof(T));
@@ -63,14 +71,19 @@ public class ApiFactory : IApiFactory
             // We need to wrap it with our custom handlers to preserve those settings
             var factoryHandler = GetHandlerFromHttpClient(factoryClient, logger);
 
+            // Create typed loggers for each handler
+            var cookieLogger = loggerFactory?.CreateLogger<CloudflareCookieHandler>();
+            var authLogger = loggerFactory?.CreateLogger<AuthHeaderHandler>();
+            var redirectLogger = loggerFactory?.CreateLogger<CloudflareAccessRedirectHandler>();
+
             // Create handler chain:
             // CloudflareAccessRedirectHandler (outermost - detects redirects)
             // -> CloudflareCookieHandler (manages CF_Authorization cookies)
             // -> AuthHeaderHandler (adds custom headers)
             // -> Factory's handler chain (preserves timeout, retry policies, etc.)
-            var cookieHandler = new CloudflareCookieHandler(logger) { InnerHandler = factoryHandler };
-            var authHandler = new AuthHeaderHandler(options, logger) { InnerHandler = cookieHandler };
-            var redirectHandler = new CloudflareAccessRedirectHandler(options, logger)
+            var cookieHandler = new CloudflareCookieHandler(cookieLogger) { InnerHandler = factoryHandler };
+            var authHandler = new AuthHeaderHandler(options, authLogger) { InnerHandler = cookieHandler };
+            var redirectHandler = new CloudflareAccessRedirectHandler(options, redirectLogger)
             {
                 InnerHandler = authHandler,
             };
