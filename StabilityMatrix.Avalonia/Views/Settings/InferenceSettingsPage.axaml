@@ -190,77 +190,111 @@
                     </ui:SettingsExpander.Footer>
                 </ui:SettingsExpander>
 
-                <ui:SettingsExpander
+                <Expander
                     Grid.Row="2"
-                    Description="Add custom HTTP headers for authenticating with remote ComfyUI servers (e.g., Cloudflare Access tokens). Headers are sent with every HTTP and WebSocket request."
-                    Header="ComfyUI Authentication Headers"
-                    IconSource="LockClosed">
-                    <ui:SettingsExpander.Footer>
-                        <StackPanel Spacing="8">
-                            <ui:CommandBar>
-                                <ui:CommandBar.PrimaryCommands>
-                                    <ui:CommandBarButton
-                                        Command="{Binding AddAuthHeaderCommand}"
-                                        IconSource="Add"
-                                        Label="Add Header" />
-                                    <ui:CommandBarButton
-                                        Command="{Binding RemoveAuthHeaderCommand}"
-                                        CommandParameter="{Binding #AuthHeadersGrid.SelectedIndex}"
-                                        IconSource="Delete"
-                                        Label="Remove Header">
-                                        <ui:CommandBarButton.IsEnabled>
-                                            <MultiBinding Converter="{x:Static BoolConverters.And}">
-                                                <Binding Path="!ComfyUIAuthHeadersView.IsEmpty" />
-                                                <Binding
-                                                    Converter="{x:Static ObjectConverters.IsNotNull}"
-                                                    ElementName="AuthHeadersGrid"
-                                                    Path="SelectedItem" />
-                                            </MultiBinding>
-                                        </ui:CommandBarButton.IsEnabled>
-                                    </ui:CommandBarButton>
-                                </ui:CommandBar.PrimaryCommands>
-                            </ui:CommandBar>
+                    HorizontalAlignment="Stretch"
+                    Classes="settings"
+                    IsExpanded="False">
+                    <Expander.Header>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <StackPanel
+                                Grid.Column="0"
+                                Orientation="Horizontal"
+                                Spacing="12">
+                                <fluentIcons:SymbolIcon
+                                    VerticalAlignment="Center"
+                                    FontSize="20"
+                                    Symbol="LockClosed" />
+                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock FontWeight="Medium" Text="ComfyUI Authentication Headers" />
+                                    <TextBlock
+                                        FontSize="12"
+                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                        Text="Add custom HTTP headers for authenticating with remote ComfyUI servers"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Expander.Header>
 
-                            <DataGrid
-                                x:Name="AuthHeadersGrid"
-                                Height="200"
-                                HorizontalAlignment="Stretch"
-                                AutoGenerateColumns="False"
-                                GridLinesVisibility="Horizontal"
-                                HeadersVisibility="Column"
-                                HorizontalScrollBarVisibility="Disabled"
-                                ItemsSource="{Binding ComfyUIAuthHeadersView}">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn
-                                        Width="0.4*"
-                                        Binding="{ReflectionBinding Key}"
-                                        Header="Header Name" />
-                                    <DataGridTextColumn
-                                        Width="0.6*"
-                                        Binding="{ReflectionBinding Value}"
-                                        Header="Header Value" />
-                                </DataGrid.Columns>
-                            </DataGrid>
-
-                            <!--  Compact Help Text  -->
-                            <TextBlock
-                                FontSize="11"
-                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                                TextWrapping="Wrap">
-                                <Run FontWeight="SemiBold" Text="Tip: " />
-                                <Run Text="Enter header name (e.g., CF-Access-Token) and value. Headers are saved automatically." />
-                            </TextBlock>
-
-                            <!--  Validation Message  -->
-                            <TextBlock
-                                FontSize="11"
-                                Foreground="{DynamicResource SystemControlErrorTextForegroundBrush}"
-                                IsVisible="{Binding AuthHeadersValidationMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                Text="{Binding AuthHeadersValidationMessage}"
-                                TextWrapping="Wrap" />
+                    <StackPanel Margin="32,8,8,8" Spacing="8">
+                        <!--  Command Buttons  -->
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Command="{Binding AddAuthHeaderCommand}" Content="Add Header">
+                                <Button.Styles>
+                                    <Style Selector="Button /template/ ContentPresenter">
+                                        <Setter Property="CornerRadius" Value="4" />
+                                    </Style>
+                                </Button.Styles>
+                            </Button>
+                            <Button
+                                Command="{Binding RemoveAuthHeaderCommand}"
+                                CommandParameter="{Binding #AuthHeadersGrid.SelectedIndex}"
+                                Content="Remove Header">
+                                <Button.IsEnabled>
+                                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                        <Binding Path="!ComfyUIAuthHeadersView.IsEmpty" />
+                                        <Binding
+                                            Converter="{x:Static ObjectConverters.IsNotNull}"
+                                            ElementName="AuthHeadersGrid"
+                                            Path="SelectedItem" />
+                                    </MultiBinding>
+                                </Button.IsEnabled>
+                                <Button.Styles>
+                                    <Style Selector="Button /template/ ContentPresenter">
+                                        <Setter Property="CornerRadius" Value="4" />
+                                    </Style>
+                                </Button.Styles>
+                            </Button>
                         </StackPanel>
-                    </ui:SettingsExpander.Footer>
-                </ui:SettingsExpander>
+
+                        <!--  DataGrid for Headers  -->
+                        <DataGrid
+                            x:Name="AuthHeadersGrid"
+                            MaxHeight="300"
+                            HorizontalAlignment="Stretch"
+                            AutoGenerateColumns="False"
+                            CanUserReorderColumns="False"
+                            CanUserResizeColumns="True"
+                            CanUserSortColumns="False"
+                            GridLinesVisibility="Horizontal"
+                            HeadersVisibility="Column"
+                            HorizontalScrollBarVisibility="Auto"
+                            ItemsSource="{Binding ComfyUIAuthHeadersView}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn
+                                    Width="2*"
+                                    x:DataType="models:HeaderKeyPair"
+                                    Binding="{Binding Key, Mode=TwoWay}"
+                                    Header="Header Name"
+                                    IsReadOnly="False" />
+                                <DataGridTextColumn
+                                    Width="3*"
+                                    x:DataType="models:HeaderKeyPair"
+                                    Binding="{Binding Value, Mode=TwoWay}"
+                                    Header="Header Value"
+                                    IsReadOnly="False" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <!--  Compact Help Text  -->
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            TextWrapping="Wrap">
+                            <Run FontWeight="SemiBold" Text="Tip: " />
+                            <Run Text="Enter header name (e.g., CF-Access-Client-Id, CF-Access-Client-Secret) and value. Double-click cells to edit. Headers are saved automatically." />
+                        </TextBlock>
+
+                        <!--  Validation Message  -->
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="{DynamicResource SystemControlErrorTextForegroundBrush}"
+                            IsVisible="{Binding AuthHeadersValidationMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                            Text="{Binding AuthHeadersValidationMessage}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
             </sg:SpacedGrid>
 
             <!--  Dimensions  -->
